@@ -1,63 +1,1803 @@
 "use client";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Analysis, EMPTY, Goal, Independence, MODES, Mode, Report, Session, Store, load, localDay, minutes, save, seed, stats, validateImport } from "@/lib/data";
+import {type FormEvent, useEffect, useMemo, useRef, useState} from "react";
+import {
+    Analysis,
+    EMPTY,
+    Goal,
+    Independence,
+    MODES,
+    Mode,
+    Report,
+    Session,
+    Store,
+    load,
+    localDay,
+    minutes,
+    save,
+    seed,
+    stats,
+    validateImport,
+} from "@/lib/data";
 
-type Screen = "today"|"focus"|"journey"|"insights"|"proof"|"settings";
-function ReflectionPlain({goal,base,complete}:{goal:Goal;base:{mode:Mode;customActivity?:string;topic:string;intent:string;duration:number};complete:(s:Session)=>void}){const [reflection,setReflection]=useState(""),[ind,setInd]=useState<Independence>("With some guidance"),[difficulty,setDifficulty]=useState(""),[busy,setBusy]=useState(false),[message,setMessage]=useState("");const submit=async()=>{if(!reflection.trim())return;setBusy(true);const s:Session={id:crypto.randomUUID(),startedAt:new Date(Date.now()-base.duration*60000).toISOString(),completedAt:new Date().toISOString(),...base,reflection,independence:ind,difficulty};try{const r=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"session",goal,data:s})});if(!r.ok)throw Error();s.analysis=await r.json() as Analysis}catch{s.analysisError=true;setMessage("Your session is safely recorded. AI interpretation can be retried later.")}complete(s);setBusy(false)};return <div className="reflection"><span className="eyebrow">PROVE THE LEARNING</span><h1>What did you actually do?</h1><p className="lede">A candid reflection turns time into useful evidence.</p><label>What happened in this session?<textarea autoFocus maxLength={1200} value={reflection} onChange={e=>setReflection(e.target.value)} placeholder="I built a small fetch request without following the tutorial…"/></label><fieldset><legend>How independently did you work?</legend><div className="independence">{independence.map(x=><button type="button" className={ind===x?"selected":""} onClick={()=>setInd(x)} key={x}>{x}</button>)}</div></fieldset><label>What was difficult? <small>optional</small><input maxLength={300} value={difficulty} onChange={e=>setDifficulty(e.target.value)} placeholder="Error handling and API response shapes"/></label>{message&&<p className="notice">{message}</p>}<button className="primary" disabled={busy||!reflection.trim()} onClick={submit}>{busy?"Interpreting your progress…":"Analyze my progress →"}</button></div>}
-type Recognition = { start:()=>void; stop:()=>void; abort:()=>void; continuous:boolean; interimResults:boolean; onstart:(()=>void)|null; onresult:((event:{results:ArrayLike<ArrayLike<{transcript:string}>>})=>void)|null; onerror:((event:{error:string})=>void)|null; onend:(()=>void)|null };
-type SpeechWindow = Window & { SpeechRecognition?:new()=>Recognition; webkitSpeechRecognition?:new()=>Recognition };
-function useOtherActivityInput(mode:Mode,value:string,onChange:(value:string)=>void){useEffect(()=>{const existing=document.getElementById("other-activity-control");existing?.remove();if(mode!=="Other")return;const host=document.querySelector(".focus-setup .mode-list");if(!host)return;const label=document.createElement("label"),input=document.createElement("input");label.id="other-activity-control";label.textContent="What kind of activity?";input.maxLength=80;input.placeholder="Conversation club";input.value=value;input.required=true;input.addEventListener("input",()=>onChange(input.value));label.appendChild(input);host.insertAdjacentElement("afterend",label);return()=>label.remove()},[mode,onChange])}
-function useTimerRing(remaining:number,total:number){useEffect(()=>{const timer=document.querySelector<HTMLElement>(".timer");if(!timer)return;let ring=timer.querySelector<SVGSVGElement>(".timer-ring");if(!ring){ring=document.createElementNS("http://www.w3.org/2000/svg","svg");ring.classList.add("timer-ring");ring.setAttribute("viewBox","0 0 200 200");ring.innerHTML='<circle class="timer-ring-track" cx="100" cy="100" r="86"/><circle class="timer-ring-progress" cx="100" cy="100" r="86"/>';timer.prepend(ring)}const circle=ring.querySelector<SVGCircleElement>(".timer-ring-progress");if(circle){const circumference=2*Math.PI*86;circle.style.strokeDasharray=String(circumference);circle.style.strokeDashoffset=String(circumference*(1-Math.max(0,Math.min(1,remaining/(total*60000)))))}},[remaining,total])}
-function useContributionIntensity(sessions:Session[]){useEffect(()=>{const daily=sessions.reduce<Record<string,number>>((total,session)=>{const day=localDay(session.completedAt);total[day]=(total[day]||0)+session.duration;return total},{});document.querySelectorAll<HTMLButtonElement>(".calendar .day").forEach(button=>{const day=button.getAttribute("aria-label")?.slice(0,10)||"",minutes=daily[day]||0,level=minutes===0?0:minutes<=60?1:minutes<=120?2:minutes<=180?3:minutes<=240?4:5;button.classList.remove("level-0","level-1","level-2","level-3","level-4","level-5");button.classList.add(`level-${level}`)});document.querySelectorAll<HTMLElement>(".journey .legend").forEach(legend=>{legend.replaceChildren();const less=document.createElement("span");less.textContent="Less";legend.append(less);for(let level=1;level<=5;level++){const swatch=document.createElement("i");swatch.className=`level-${level}`;legend.append(swatch)}const more=document.createElement("span");more.textContent="More";legend.append(more)})},[sessions])}
-function useCustomActivityLabels(sessions:Session[]){useEffect(()=>{document.querySelectorAll<HTMLElement>(".event").forEach(event=>{event.querySelector(".custom-activity")?.remove();const topic=event.querySelector("strong")?.textContent,session=sessions.find(item=>item.topic===topic&&item.mode==="Other"&&item.customActivity);if(session){const label=document.createElement("small");label.className="custom-activity";label.textContent=`Other activity: ${session.customActivity}`;event.querySelector("div:last-child")?.append(label)}})},[sessions])}
-function useGoalPlaceholders(){useEffect(()=>{document.querySelectorAll<HTMLLabelElement>(".goal-form label").forEach(label=>{const input=label.querySelector<HTMLInputElement>("input[type=text],input:not([type])"),area=label.querySelector<HTMLTextAreaElement>("textarea");if(input&&!input.placeholder)input.placeholder="e.g. Speak English confidently";if(area&&!area.placeholder)area.placeholder="e.g. I want to communicate confidently in interviews and everyday conversations."})},[])}
-function Reflection({goal,base,complete}:{goal:Goal;base:{mode:Mode;topic:string;intent:string;duration:number};complete:(s:Session)=>void}){return <ReflectionPlain goal={goal} base={base} complete={complete}/>}
-const independence: Independence[]=["Following a tutorial","With significant guidance","With some guidance","Mostly independently","Completely independently"];
-function ModeMark({mode}:{mode:Mode}) { return <span className={`mode ${mode.toLowerCase()}`}>{mode}</span>; }
-function ThemeToggle(){const [dark,setDark]=useState(false);useEffect(()=>{const saved=localStorage.getItem("learning-arc-theme");const next=saved?saved==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;setDark(next);document.documentElement.dataset.theme=next?"dark":"light"},[]);const toggle=()=>{const next=!dark;setDark(next);document.documentElement.dataset.theme=next?"dark":"light";localStorage.setItem("learning-arc-theme",next?"dark":"light")};return <button className="theme-toggle" onClick={toggle} aria-label={`Switch to ${dark?"light":"dark"} mode`}><span>{dark?"☾":"☀"}</span><i>{dark?"Dark":"Light"}</i></button>}
-export default function LearningArc(){
- const [store,setStore]=useState<Store>(EMPTY),[ready,setReady]=useState(false),[screen,setScreen]=useState<Screen>("today"),[onboard,setOnboard]=useState(false);
- useEffect(()=>{const s=load();setStore(s);setOnboard(!s.goal);setReady(true)},[]); useEffect(()=>{if(ready) save(store)},[store,ready]);
- const st=useMemo(()=>stats(store.sessions),[store.sessions]); useContributionIntensity(store.sessions);useCustomActivityLabels(store.sessions);useGoalPlaceholders(); const update=(patch:Partial<Store>)=>setStore(s=>({...s,...patch}));
- if(!ready) return <main className="loading">Loading your learning arc…</main>;
- if(onboard) return <><GoalSetup initial={store.goal} onDone={g=>{update({goal:g});setOnboard(false)}}/><ThemeToggle/></>;
- const retrySession=async(id:string)=>{const session=store.sessions.find(s=>s.id===id);if(!session)return;const r=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"session",goal:store.goal,data:session})});if(!r.ok)throw Error();const analysis=await r.json() as Analysis;setStore(current=>({...current,sessions:current.sessions.map(s=>s.id===id?{...s,analysis,analysisError:false}:s)}));};
- return <main><header><button className="brand" onClick={()=>setScreen("today")} aria-label="Learning Arc home"><i>↗</i> Learning Arc</button><nav>{(["today","focus","journey","insights","proof","settings"] as Screen[]).map(x=><button key={x} onClick={()=>setScreen(x)} className={screen===x?"active":""}>{x}</button>)}</nav><button className="goal-chip" onClick={()=>setScreen("settings")}>{store.goal?.title}</button></header>
- <section className="app">{screen==="today"&&<Today goal={store.goal!} st={st} sessions={store.sessions} go={setScreen} retry={retrySession}/>} {screen==="focus"&&<PomodoroFocus goal={store.goal!} done={session=>{update({sessions:[...store.sessions,session]});setScreen("today")}}/>} {screen==="journey"&&<Journey sessions={store.sessions} st={st}/>} {screen==="insights"&&<InsightsFixed store={store} st={st} update={update}/>} {screen==="proof"&&<Proof goal={store.goal!} st={st} report={store.report}/>} {screen==="settings"&&<Settings store={store} update={update} editGoal={()=>setOnboard(true)}/>}</section><ThemeToggle/></main>;
+type Screen = "today" | "focus" | "journey" | "insights" | "proof" | "settings";
+function ReflectionPlain({
+    goal,
+    base,
+    complete,
+}: {
+    goal: Goal;
+    base: {mode: Mode; customActivity?: string; topic: string; intent: string; duration: number};
+    complete: (s: Session) => void;
+}) {
+    const [reflection, setReflection] = useState(""),
+        [ind, setInd] = useState<Independence>("With some guidance"),
+        [difficulty, setDifficulty] = useState(""),
+        [busy, setBusy] = useState(false),
+        [message, setMessage] = useState("");
+    const submit = async () => {
+        if (!reflection.trim()) return;
+        setBusy(true);
+        const s: Session = {
+            id: crypto.randomUUID(),
+            startedAt: new Date(Date.now() - base.duration * 60000).toISOString(),
+            completedAt: new Date().toISOString(),
+            ...base,
+            reflection,
+            independence: ind,
+            difficulty,
+        };
+        try {
+            const r = await fetch("/api/analyze", {
+                method: "POST",
+                headers: {"content-type": "application/json"},
+                body: JSON.stringify({kind: "session", goal, data: s}),
+            });
+            if (!r.ok) throw Error();
+            s.analysis = (await r.json()) as Analysis;
+        } catch {
+            s.analysisError = true;
+            setMessage("Your session is safely recorded. AI interpretation can be retried later.");
+        }
+        complete(s);
+        setBusy(false);
+    };
+    return (
+        <div className="reflection">
+            <span className="eyebrow">PROVE THE LEARNING</span>
+            <h1>What did you actually do?</h1>
+            <p className="lede">A candid reflection turns time into useful evidence.</p>
+            <label>
+                What happened in this session?
+                <textarea
+                    autoFocus
+                    maxLength={1200}
+                    value={reflection}
+                    onChange={(e) => setReflection(e.target.value)}
+                    placeholder="I built a small fetch request without following the tutorial…"
+                />
+            </label>
+            <fieldset>
+                <legend>How independently did you work?</legend>
+                <div className="independence">
+                    {independence.map((x) => (
+                        <button type="button" className={ind === x ? "selected" : ""} onClick={() => setInd(x)} key={x}>
+                            {x}
+                        </button>
+                    ))}
+                </div>
+            </fieldset>
+            <label>
+                What was difficult? <small>optional</small>
+                <input
+                    maxLength={300}
+                    value={difficulty}
+                    onChange={(e) => setDifficulty(e.target.value)}
+                    placeholder="Error handling and API response shapes"
+                />
+            </label>
+            {message && <p className="notice">{message}</p>}
+            <button className="primary" disabled={busy || !reflection.trim()} onClick={submit}>
+                {busy ? "Interpreting your progress…" : "Analyze my progress →"}
+            </button>
+        </div>
+    );
 }
-function GoalSetup({initial,onDone}:{initial?:Goal;onDone:(g:Goal)=>void}){const known=["30 days","90 days","180 days"],initialDuration=initial?.duration||"90 days",[title,setTitle]=useState(initial?.title||""),[description,setDescription]=useState(initial?.description||""),[duration,setDuration]=useState(known.includes(initialDuration)?initialDuration:"Custom"),[customDays,setCustomDays]=useState(known.includes(initialDuration)?"":initialDuration.replace(/\D/g,""));const submit=(e:FormEvent)=>{e.preventDefault();const days=Number(customDays);if(!title.trim()||(duration==="Custom"&&(!Number.isInteger(days)||days<1||days>3650)))return;onDone({title:title.trim(),description:description.trim(),duration:duration==="Custom"?`${days} days`:duration,createdAt:initial?.createdAt||new Date().toISOString()})};return <main className="onboard"><div className="orb"/><div className="onboard-copy"><span className="eyebrow">LEARNING, MADE VISIBLE</span><h1>Give your learning<br/><em>a clear direction.</em></h1><p>Learning Arc turns focused effort into a visible journey. Your data stays on this device.</p><div className="loop">DECLARE <b>→</b> FOCUS <b>→</b> PROVE <b>→</b> GROW</div></div><form className="goal-form" onSubmit={submit}><span className="eyebrow">{initial?"EDIT DIRECTION":"START WITH A DIRECTION"}</span><h2>What are you trying to achieve?</h2><label>Goal title<input autoFocus maxLength={120} value={title} onChange={e=>setTitle(e.target.value)} required/></label><label>Why does it matter? <small>optional</small><textarea maxLength={500} value={description} onChange={e=>setDescription(e.target.value)}/></label><fieldset><legend>Target horizon</legend>{[...known,"Custom"].map(x=><label className="pill" key={x}><input type="radio" checked={duration===x} onChange={()=>setDuration(x)}/>{x}</label>)}{duration==="Custom"&&<label>Custom number of days<input type="number" min="1" max="3650" value={customDays} onChange={e=>setCustomDays(e.target.value)} required/></label>}</fieldset><button className="primary">{initial?"Save goal":"Begin my learning arc"} <b>→</b></button></form></main>}
-function Onboarding({onDone}:{onDone:(g:Goal)=>void}){void onDone;return null}
-function Today({goal,st,sessions,go,retry}:{goal:Goal;st:ReturnType<typeof stats>;sessions:Session[];go:(s:Screen)=>void;retry:(id:string)=>Promise<void>}){const recent=[...sessions].sort((a,b)=>+new Date(b.completedAt)-+new Date(a.completedAt)).slice(0,4);const [retrying,setRetrying]=useState<string>();const retryAnalysis=async(id:string)=>{setRetrying(id);try{await retry(id)}catch{alert("Analysis is still unavailable. Your evidence remains safely saved.")}finally{setRetrying(undefined)}};return <><div className="hero"><div><span className="eyebrow">TODAY’S DIRECTION</span><h1>{goal.title}</h1><p>{goal.description||"Turn focused effort into independent capability."}</p></div><button className="primary" onClick={()=>go("focus")}>Start a focus session <b>→</b></button></div><div className="stat-row"><Stat value={minutes(st.today)} label="focused today"/><Stat value={`${st.streak} day${st.streak===1?"":"s"}`} label="current streak"/><Stat value={minutes(st.total)} label="total evidence"/><Stat value={String(st.done.length)} label="sessions completed"/></div><div className="grid two"><section className="panel"><div className="panel-head"><div><span className="eyebrow">YOUR LEARNING BALANCE</span><h2>How you’ve been growing</h2></div><button className="text" onClick={()=>go("journey")}>Explore journey →</button></div>{st.done.length?<Balance st={st}/>:<Empty title="Your journey starts with one honest session." text="Focus on something meaningful, then reflect on what you actually did."/>}</section><section className="panel"><span className="eyebrow">RECENT EVIDENCE</span><h2>Learning events</h2>{recent.length?recent.map(s=><article className="event" key={s.id}><div className="event-dot"/><div><strong>{s.topic}</strong><p><ModeMark mode={s.mode}/> · {minutes(s.duration)} · {s.analysis?.evidence||"unanalysed"} evidence</p><small>{s.analysis?.summary||s.reflection}</small>{s.analysisError&&<button className="text" disabled={retrying===s.id} onClick={()=>retryAnalysis(s.id)}>{retrying===s.id?"Analyzing…":"Retry analysis"}</button>}</div></article>):<Empty title="No sessions yet" text="Your completed focus sessions will become evidence here."/>}</section></div></>}
-function Stat({value,label}:{value:string;label:string}){return <div className="stat"><strong>{value}</strong><span>{label}</span></div>}; function Empty({title,text}:{title:string;text:string}){return <div className="empty"><b>◇</b><strong>{title}</strong><p>{text}</p></div>}
-function FocusFixed({goal,done}:{goal:Goal;done:(s:Session)=>void}) {
- const [mode,setMode]=useState<Mode>("Learning"),[topic,setTopic]=useState(""),[intent,setIntent]=useState(""),[mins,setMins]=useState(25),[started,setStarted]=useState<number>(),[pauseAt,setPauseAt]=useState<number>(),[paused,setPaused]=useState(0),[now,setNow]=useState(0),[reflect,setReflect]=useState(false);
- useEffect(()=>{const id=setInterval(()=>setNow(Date.now()),500);return()=>clearInterval(id)},[]);
- const remaining=started?Math.max(0,mins*60000-(now-started-paused-(pauseAt?now-pauseAt:0))):mins*60000;
- useEffect(()=>{if(started&&!pauseAt&&remaining===0){setReflect(true);setStarted(undefined)}},[remaining,started,pauseAt]);
- const begin=()=>{if(!topic.trim())return;const at=Date.now();setNow(at);setStarted(at);setPaused(0);setPauseAt(undefined)};
- if(reflect)return <Reflection goal={goal} base={{mode,topic,intent,duration:mins}} complete={done}/>;
- return <div className="focus"><div className="focus-setup"><span className="eyebrow">FOCUS WITH INTENTION</span><h1>{started?"Stay with the work.":"What are you working on?"}</h1>{!started&&<><div className="mode-list">{MODES.map(m=><button key={m} onClick={()=>setMode(m)} className={mode===m?"selected":""}>{m}</button>)}</div><label>Topic<input value={topic} onChange={e=>setTopic(e.target.value)} maxLength={80} placeholder="Async JavaScript"/></label><label>What do you want to accomplish? <small>optional</small><input value={intent} onChange={e=>setIntent(e.target.value)} maxLength={240} placeholder="Understand async/await well enough to use it"/></label><div className="presets">{[25,50].map(x=><button className={mins===x?"selected":""} onClick={()=>setMins(x)} key={x}>{x} min</button>)}<input aria-label="Custom minutes" type="number" min="1" max="240" value={mins} onChange={e=>setMins(Math.min(240,Math.max(1,+e.target.value||1)))}/></div></>}</div><div className="timer"><span>{started?"FOCUSING ON":"READY WHEN YOU ARE"}</span><strong>{String(Math.ceil(remaining/60000)).padStart(2,"0")}<i>:</i>{String(Math.floor(remaining/1000)%60).padStart(2,"0")}</strong><p>{topic||"Choose a topic to begin"}</p>{started?<div><button className="secondary" onClick={()=>{if(pauseAt){setPaused(p=>p+Date.now()-pauseAt);setPauseAt(undefined)}else setPauseAt(Date.now())}}>{pauseAt?"Resume":"Pause"}</button><button className="text danger" onClick={()=>{setStarted(undefined);setPauseAt(undefined)}}>Cancel</button></div>:<button className="primary" onClick={begin} disabled={!topic.trim()}>Start focus →</button>}<button className="debug" onClick={()=>{if(topic.trim()){const at=Date.now()-59000;setMins(1);setNow(at);setStarted(at)}}}>Developer: complete a 1-minute test session</button></div></div>
+type Recognition = {
+    start: () => void;
+    stop: () => void;
+    abort: () => void;
+    continuous: boolean;
+    interimResults: boolean;
+    onstart: (() => void) | null;
+    onresult: ((event: {results: ArrayLike<ArrayLike<{transcript: string}>>}) => void) | null;
+    onerror: ((event: {error: string}) => void) | null;
+    onend: (() => void) | null;
+};
+type SpeechWindow = Window & {
+    SpeechRecognition?: new () => Recognition;
+    webkitSpeechRecognition?: new () => Recognition;
+};
+function useOtherActivityInput(mode: Mode, value: string, onChange: (value: string) => void) {
+    useEffect(() => {
+        const existing = document.getElementById("other-activity-control");
+        existing?.remove();
+        if (mode !== "Other") return;
+        const host = document.querySelector(".focus-setup .mode-list");
+        if (!host) return;
+        const label = document.createElement("label"),
+            input = document.createElement("input");
+        label.id = "other-activity-control";
+        label.textContent = "What kind of activity?";
+        input.maxLength = 80;
+        input.placeholder = "Conversation club";
+        input.value = value;
+        input.required = true;
+        input.addEventListener("input", () => onChange(input.value));
+        label.appendChild(input);
+        host.insertAdjacentElement("afterend", label);
+        return () => label.remove();
+    }, [mode, onChange]);
 }
-function PomodoroFocus({goal,done}:{goal:Goal;done:(s:Session)=>void}) {
- const [mode,setMode]=useState<Mode>("Learning"),[customActivity,setCustomActivity]=useState(""),[topic,setTopic]=useState(""),[intent,setIntent]=useState(""),[focusMins,setFocusMins]=useState(25),[shortMins,setShortMins]=useState(5),[longMins,setLongMins]=useState(15),[cycles,setCycles]=useState(4),[autoStart,setAutoStart]=useState(false);
- const [phase,setPhase]=useState<"focus"|"short"|"long">("focus"),[completed,setCompleted]=useState(0),[started,setStarted]=useState<number>(),[pauseAt,setPauseAt]=useState<number>(),[paused,setPaused]=useState(0),[now,setNow]=useState(0),[waiting,setWaiting]=useState(false),[reflect,setReflect]=useState(false); const sounded=useRef(false);
- useEffect(()=>{setAutoStart(localStorage.getItem("learning-arc-auto-start")==="true");const id=setInterval(()=>setNow(Date.now()),250);return()=>{clearInterval(id);document.title="Learning Arc"}},[]);
- useEffect(()=>{localStorage.setItem("learning-arc-auto-start",String(autoStart))},[autoStart]);
- const phaseMins=phase==="focus"?focusMins:phase==="short"?shortMins:longMins; const remaining=started?Math.max(0,phaseMins*60000-(now-started-paused-(pauseAt?now-pauseAt:0))):phaseMins*60000; const seconds=Math.ceil(remaining/1000);useTimerRing(remaining,phaseMins);
- useEffect(()=>{if(started&&!pauseAt)document.title=`${String(Math.floor(seconds/60)).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")} • ${phase==="focus"?"Focus":"Break"} | Learning Arc`;else document.title="Learning Arc"},[started,pauseAt,seconds,phase]);
- const sound=()=>{if(sounded.current)return;sounded.current=true;try{const AudioContext=window.AudioContext||(window as Window & {webkitAudioContext?:typeof window.AudioContext}).webkitAudioContext;if(!AudioContext)return;const context=new AudioContext();[0,0.72,1.44].forEach((offset,index)=>{const oscillator=context.createOscillator(),gain=context.createGain(),at=context.currentTime+offset;oscillator.type="sine";oscillator.frequency.setValueAtTime([523,659,784][index],at);gain.gain.setValueAtTime(.0001,at);gain.gain.exponentialRampToValueAtTime(.16,at+.035);gain.gain.exponentialRampToValueAtTime(.0001,at+.55);oscillator.connect(gain).connect(context.destination);oscillator.start(at);oscillator.stop(at+.58)})}catch{}};
- const startPhase=()=>{if(mode==="Other"&&!customActivity.trim())return;const at=Date.now();sounded.current=false;setNow(at);setStarted(at);setPaused(0);setPauseAt(undefined);setWaiting(false)};
- useEffect(()=>{if(!started||pauseAt||remaining!==0)return;sound();const next=phase==="focus"?completed+1:completed;const nextPhase=phase==="focus"?(next>=cycles?"long":"short"):phase==="short"?"focus":"long";if(phase==="long"){setReflect(true);setStarted(undefined)}else{setCompleted(next);setPhase(nextPhase);if(autoStart)startPhase();else{setStarted(undefined);setWaiting(true)}}},[remaining,started,pauseAt,phase,completed,cycles,autoStart]);
- useOtherActivityInput(mode,customActivity,setCustomActivity);const cancel=()=>{setStarted(undefined);setPauseAt(undefined);setWaiting(false);setPhase("focus");setCompleted(0);setPaused(0);setNow(0)}; const active=!!started; const begun=active||waiting||completed>0||phase!=="focus";
- if(reflect)return <ReflectionPlain goal={goal} base={{mode,customActivity:mode==="Other"?customActivity:undefined,topic,intent,duration:focusMins*cycles}} complete={done}/>;
- const nextLabel=phase==="short"?"Start Break":phase==="long"?"Start Long Break":completed?"Start Next Focus":"Start Pomodoro round →";
- return <div className="focus"><div className="focus-setup"><span className="eyebrow">CUSTOM POMODORO</span><h1>{active?phase==="focus"?"Stay with the work.":"Step away. You earned it.":waiting?"Timer complete.":"Design your focus round."}</h1>{!begun&&<><div className="mode-list">{MODES.map(m=><button key={m} onClick={()=>setMode(m)} className={mode===m?"selected":""}>{m}</button>)}</div><label>Topic<input value={topic} onChange={e=>setTopic(e.target.value)} maxLength={80} placeholder="Async JavaScript"/></label><label>What do you want to accomplish? <small>optional</small><input value={intent} onChange={e=>setIntent(e.target.value)} maxLength={240} placeholder="Understand async/await well enough to use it"/></label><div className="pomodoro-settings"><label>Focus minutes<input type="number" min="1" max="120" value={focusMins} onChange={e=>setFocusMins(Math.max(1,Math.min(120,+e.target.value||1)))}/></label><label>Short break<input type="number" min="1" max="60" value={shortMins} onChange={e=>setShortMins(Math.max(1,Math.min(60,+e.target.value||1)))}/></label><label>Focus cycles<input type="number" min="1" max="8" value={cycles} onChange={e=>setCycles(Math.max(1,Math.min(8,+e.target.value||1)))}/></label><label>Long break<input type="number" min="1" max="90" value={longMins} onChange={e=>setLongMins(Math.max(1,Math.min(90,+e.target.value||1)))}/></label></div><label className="toggle"><input type="checkbox" checked={autoStart} onChange={e=>setAutoStart(e.target.checked)}/> Auto-start next timer</label><p className="fine">{focusMins}m focus → {shortMins}m break × {cycles} → {longMins}m long break</p></>}</div><div className="timer"><span>{active?`${phase==="focus"?"FOCUS":"BREAK"} · ${phase==="focus"?`CYCLE ${completed+1} OF ${cycles}`:phase==="long"?"LONG BREAK":"SHORT BREAK"}`:waiting?"READY FOR THE NEXT PHASE":"READY WHEN YOU ARE"}</span><strong>{String(Math.floor(seconds/60)).padStart(2,"0")}<i>:</i>{String(seconds%60).padStart(2,"0")}</strong><p>{phase==="focus"?topic||"Choose a topic to begin":phase==="long"?"Take a real reset before reflecting.":"Rest your attention; start when you are ready."}</p>{active?<div><button className="secondary" onClick={()=>{if(pauseAt){setPaused(p=>p+Date.now()-pauseAt);setPauseAt(undefined)}else setPauseAt(Date.now())}}>{pauseAt?"Resume":"Pause"}</button><button className="text danger" onClick={cancel}>Cancel round</button></div>:<div><button className="primary" onClick={startPhase} disabled={!topic.trim()}>{nextLabel}</button>{begun&&<button className="text danger" onClick={cancel}>Cancel round</button>}</div>}</div></div>
+function useTimerRing(remaining: number, total: number) {
+    useEffect(() => {
+        const timer = document.querySelector<HTMLElement>(".timer");
+        if (!timer) return;
+        let ring = timer.querySelector<SVGSVGElement>(".timer-ring");
+        if (!ring) {
+            ring = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            ring.classList.add("timer-ring");
+            ring.setAttribute("viewBox", "0 0 200 200");
+            ring.innerHTML =
+                '<circle class="timer-ring-track" cx="100" cy="100" r="86"/><circle class="timer-ring-progress" cx="100" cy="100" r="86"/>';
+            timer.prepend(ring);
+        }
+        const circle = ring.querySelector<SVGCircleElement>(".timer-ring-progress");
+        if (circle) {
+            const circumference = 2 * Math.PI * 86;
+            circle.style.strokeDasharray = String(circumference);
+            circle.style.strokeDashoffset = String(
+                circumference * (1 - Math.max(0, Math.min(1, remaining / (total * 60000))))
+            );
+        }
+    }, [remaining, total]);
 }
-function Balance({st}:{st:ReturnType<typeof stats>}){return <div className="balance">{MODES.filter(m=>m!=="Other").map(m=>{const n=st.byMode[m]||0,p=st.total?Math.round(n/st.total*100):0;return <div key={m}><span>{m}</span><div className="bar"><i className={m.toLowerCase()} style={{width:`${p}%`}}/></div><b>{p}%</b></div>})}</div>}
-function Focus({goal,done}:{goal:Goal;done:(s:Session)=>void}){const [mode,setMode]=useState<Mode>("Learning"),[topic,setTopic]=useState(""),[intent,setIntent]=useState(""),[mins,setMins]=useState(25),[started,setStarted]=useState<number>(),[pauseAt,setPauseAt]=useState<number>(),[paused,setPaused]=useState(0),[now,setNow]=useState(Date.now()),[reflect,setReflect]=useState(false);const ticker=useRef<ReturnType<typeof setInterval>|null>(null);useEffect(()=>{ticker.current=setInterval(()=>setNow(Date.now()),500);return()=>{if(ticker.current)clearInterval(ticker.current)}},[]);const remaining=started?Math.max(0,mins*60000-(now-started-paused-(pauseAt?now-pauseAt:0))):mins*60000;useEffect(()=>{if(started&&!pauseAt&&remaining===0){setReflect(true);setStarted(undefined)}},[remaining,started,pauseAt]);const begin=()=>{if(!topic.trim())return;setStarted(Date.now());setPaused(0);setPauseAt(undefined)};if(reflect)return <Reflection goal={goal} base={{mode,topic,intent,duration:mins}} complete={done}/>;return <div className="focus"><div className="focus-setup"><span className="eyebrow">FOCUS WITH INTENTION</span><h1>{started?"Stay with the work.":"What are you working on?"}</h1>{!started&&<><div className="mode-list">{MODES.map(m=><button key={m} onClick={()=>setMode(m)} className={mode===m?"selected":""}>{m}</button>)}</div><label>Topic<input value={topic} onChange={e=>setTopic(e.target.value)} maxLength={80} placeholder="Async JavaScript"/></label><label>What do you want to accomplish? <small>optional</small><input value={intent} onChange={e=>setIntent(e.target.value)} maxLength={240} placeholder="Understand async/await well enough to use it"/></label><div className="presets">{[25,50].map(x=><button className={mins===x?"selected":""} onClick={()=>setMins(x)} key={x}>{x} min</button>)}<input aria-label="Custom minutes" type="number" min="1" max="240" value={mins} onChange={e=>setMins(Math.min(240,Math.max(1,+e.target.value||1)))} /></div></>}</div><div className="timer"><span>{started?"FOCUSING ON": "READY WHEN YOU ARE"}</span><strong>{String(Math.ceil(remaining/60000)).padStart(2,"0")}<i>:</i>{String(Math.floor(remaining/1000)%60).padStart(2,"0")}</strong><p>{topic||"Choose a topic to begin"}</p>{started?<div><button className="secondary" onClick={()=>{if(pauseAt){setPaused(p=>p+Date.now()-pauseAt);setPauseAt(undefined)}else setPauseAt(Date.now())}}>{pauseAt?"Resume":"Pause"}</button><button className="text danger" onClick={()=>{setStarted(undefined);setPauseAt(undefined)}}>Cancel</button></div>:<button className="primary" onClick={begin} disabled={!topic.trim()}>Start focus <b>→</b></button>}<button className="debug" onClick={()=>{if(topic.trim()){setMins(1);setStarted(Date.now()-59000)}}}>Developer: complete a 1-minute test session</button></div></div>}
-function ReflectionReliable({goal,base,complete}:{goal:Goal;base:{mode:Mode;customActivity?:string;topic:string;intent:string;duration:number};complete:(s:Session)=>void}){const [reflection,setReflection]=useState(""),[ind,setInd]=useState<Independence>("With some guidance"),[difficulty,setDifficulty]=useState(""),[busy,setBusy]=useState(false),[message,setMessage]=useState(""),[listening,setListening]=useState(false),[supported,setSupported]=useState(false);const recognition=useRef<Recognition|null>(null),stopping=useRef(false);useEffect(()=>{const w=window as SpeechWindow;setSupported(!!(w.SpeechRecognition||w.webkitSpeechRecognition));return()=>{stopping.current=true;recognition.current?.abort()}},[]);const toggle=()=>{if(listening){stopping.current=true;recognition.current?.stop();return}const w=window as SpeechWindow,Speech=w.SpeechRecognition||w.webkitSpeechRecognition;if(!Speech)return;const next=new Speech();next.continuous=true;next.interimResults=false;next.onstart=()=>{stopping.current=false;setListening(true);setMessage("")};next.onresult=event=>{let words="";for(let i=0;i<event.results.length;i++)words+=`${event.results[i][0]?.transcript||""} `;if(words.trim())setReflection(value=>`${value}${value.trim()?" ":""}${words.trim()}`)};next.onerror=event=>{const messages:Record<string,string>={"no-speech":"No speech was detected. Try again when you are ready.","audio-capture":"Your microphone could not be accessed. Check your system input.","not-allowed":"Microphone permission was denied. You can continue typing.","service-not-allowed":"Speech recognition is unavailable in this browser.",network:"Speech recognition needs a network connection.",aborted:""};setMessage(messages[event.error]||"Speech recognition could not continue. You can keep typing.")};next.onend=()=>{setListening(false);recognition.current=null};recognition.current=next;try{next.start()}catch{setMessage("Dictation could not start. You can continue typing.")}};const submit=async()=>{if(!reflection.trim())return;setBusy(true);const s:Session={id:crypto.randomUUID(),startedAt:new Date(Date.now()-base.duration*60000).toISOString(),completedAt:new Date().toISOString(),...base,reflection,independence:ind,difficulty};try{const r=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"session",goal,data:s})});if(!r.ok)throw Error();s.analysis=await r.json() as Analysis}catch{s.analysisError=true;setMessage("Your session is safely recorded. AI interpretation can be retried later.")}complete(s);setBusy(false)};return <div className="reflection"><span className="eyebrow">PROVE THE LEARNING</span><h1>What did you actually do?</h1><p className="lede">Review your evidence before analysis.</p><label>What happened in this session?<textarea autoFocus maxLength={1200} value={reflection} onChange={e=>setReflection(e.target.value)} /></label>{supported&&<button type="button" className="secondary" onClick={toggle}>{listening?"Stop recording":"🎙 Dictate evidence"}</button>}{listening&&<p className="fine">Listening… speak naturally; your words will be added above.</p>}<fieldset><legend>How independently did you work?</legend><div className="independence">{independence.map(x=><button type="button" className={ind===x?"selected":""} onClick={()=>setInd(x)} key={x}>{x}</button>)}</div></fieldset><label>What was difficult? <small>optional</small><input maxLength={300} value={difficulty} onChange={e=>setDifficulty(e.target.value)} /></label>{message&&<p className="notice">{message}</p>}<button className="primary" disabled={busy||!reflection.trim()} onClick={submit}>{busy?"Interpreting your progress…":"Analyze my progress →"}</button></div>}
-function Journey({sessions,st}:{sessions:Session[];st:ReturnType<typeof stats>}){const [selected,setSelected]=useState<string>();const start=new Date();start.setDate(start.getDate()-83);const days=Array.from({length:84},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);return localDay(d.toISOString())});const events=selected?sessions.filter(s=>localDay(s.completedAt)===selected):[];return <><div className="page-head"><span className="eyebrow">LEARNING JOURNEY</span><h1>The story of your effort.</h1><p>Activity is not a score—it’s evidence you can return to and build upon.</p></div><section className="panel journey"><div className="calendar">{days.map(day=>{const n=st.daily[day]||0;return <button aria-label={`${day}: ${n} minutes`} onClick={()=>setSelected(day)} key={day} className={`day ${n>0? n>=50?"deep":"active":""} ${selected===day?"chosen":""}`}/>})}</div><div className="legend"><span>less</span><i/><i className="active"/><i className="deep"/><span>more meaningful focus</span></div></section><div className="grid two"><section className="panel"><span className="eyebrow">SKILL EVOLUTION</span><h2>Repeated evidence, not credentials</h2><div className="skills">{Object.entries(sessions.reduce<Record<string,Session[]>>((a,s)=>{(s.analysis?.skills||[s.topic]).forEach(k=>(a[k]=a[k]||[]).push(s));return a},{})).sort((a,b)=>b[1].length-a[1].length).slice(0,8).map(([skill,items])=>{const stage=items.some(i=>i.mode==="Building")?"Applied":items.some(i=>i.mode==="Practicing")?"Practiced":"Learned";return <div key={skill}><strong>{skill}</strong><span>{stage}</span><i style={{width:`${Math.min(100,items.length*28)}%`}}/></div>})}{!sessions.length&&<Empty title="Skills appear as you log evidence" text="The system looks for recurring topics across your sessions."/>}</div></section><section className="panel"><span className="eyebrow">DAY DETAIL</span><h2>{selected?new Date(`${selected}T12:00:00`).toLocaleDateString(undefined,{month:"long",day:"numeric"}):"Select a day"}</h2>{selected?(events.length?events.map(e=><article className="event" key={e.id}><div className="event-dot"/><div><strong>{e.topic}</strong><p><ModeMark mode={e.mode}/> · {minutes(e.duration)}</p><small>{e.analysis?.summary||e.reflection}</small></div></article>):<Empty title="No completed focus sessions" text="A quiet day is part of a real journey too."/>):<Empty title="Explore your pattern" text="Choose an active day to see its learning evidence."/>}</section></div></>}
-function Insights({store,st,update}:{store:Store;st:ReturnType<typeof stats>;update:(p:Partial<Store>)=>void}){const [busy,setBusy]=useState(false),[error,setError]=useState("");const report=store.report;const generate=async()=>{if(st.done.length<3){setError("Log at least three completed sessions before asking for a meaningful review.");return}setBusy(true);setError("");try{const facts={periodDays:14,totalMinutes:st.week,sessions:st.done.length,modeMinutes:st.byMode,topTopics:st.top,independence:st.done.reduce<Record<string,number>>((a,s)=>{a[s.independence]=(a[s.independence]||0)+1;return a},{}),recent:st.done.slice(-10).map(s=>({mode:s.mode,topic:s.topic,duration:s.duration,analysis:s.analysis}))};const r=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"review",goal:store.goal,data:facts})});if(!r.ok)throw Error();const generated=(await r.json()) as Omit<Report,"createdAt">;update({report:{...generated,createdAt:new Date().toISOString()}})}catch{setError("Learning Intelligence is temporarily unavailable. Your deterministic evidence remains intact.")}finally{setBusy(false)}};return <><div className="page-head"><span className="eyebrow">LEARNING INTELLIGENCE</span><h1>Patterns, interpreted carefully.</h1><p>Deterministic facts from your device + an intentional AI reading of your learning evidence.</p></div>{report?<section className="intelligence"><div><span className="eyebrow">GENERATED {new Date(report.createdAt).toLocaleDateString()}</span><h2>{report.narrative}</h2></div><div className="intel-grid"><Insight title="Emerging pattern" text={report.pattern}/><Insight title="Important gap" text={report.gap}/><Insight title="Next move" text={report.priority}/></div><button className="secondary" onClick={generate} disabled={busy}>{busy?"Refreshing…":"Refresh interpretation"}</button></section>:<section className="intelligence empty"><b>✦</b><strong>Give your journey a thoughtful reading</strong><p>Learning Intelligence interprets your actual balance, topics, and independence patterns. It never replaces the underlying evidence.</p><button className="primary" disabled={busy} onClick={generate}>{busy?"Reading your evidence…":"Generate Learning Intelligence →"}</button>{error&&<p className="notice">{error}</p>}</section>}<section className="grid two"><div className="panel"><span className="eyebrow">DETERMINISTIC EVIDENCE</span><h2>What’s been measured</h2><p className="facts">{minutes(st.week)} in the last 7 days · {st.done.length} completed sessions · {st.streak}-day active streak</p><Balance st={st}/></div><div className="panel"><span className="eyebrow">AI USE, WITH INTENTION</span><h2>Not a generic chatbot</h2><p>AI interprets a reflection after you choose to analyze it, and interprets this aggregate review only when you ask. Raw notes are treated as untrusted data, and conclusions are signals—not facts.</p></div></section></>}; function Insight({title,text}:{title:string;text:string}){return <div><span>{title}</span><p>{text}</p></div>}
-function InsightsFixed({store,st,update}:{store:Store;st:ReturnType<typeof stats>;update:(p:Partial<Store>)=>void}) { const [busy,setBusy]=useState(false),[error,setError]=useState(""); const generate=async()=>{if(!st.done.length){setError("Complete one focus session first, then Learning Intelligence can read your evidence.");return}setBusy(true);setError("");try{const facts={periodDays:14,totalMinutes:st.week,sessions:st.done.length,modeMinutes:st.byMode,topTopics:st.top,independence:st.done.reduce<Record<string,number>>((a,s)=>{a[s.independence]=(a[s.independence]||0)+1;return a},{}),recent:st.done.slice(-10).map(s=>({mode:s.mode,topic:s.topic,duration:s.duration,analysis:s.analysis}))};const r=await fetch("/api/analyze",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:"review",goal:store.goal,data:facts})});if(!r.ok)throw Error();const generated=(await r.json()) as Omit<Report,"createdAt">;update({report:{...generated,createdAt:new Date().toISOString()}})}catch{setError("Learning Intelligence is temporarily unavailable. Your completed learning evidence is safely saved—try refreshing later.")}finally{setBusy(false)}}; const report=store.report;return <><div className="page-head"><span className="eyebrow">LEARNING INTELLIGENCE</span><h1>Patterns, interpreted carefully.</h1><p>Deterministic evidence from your device, then an intentional AI interpretation.</p></div>{report?<section className="intelligence"><div><span className="eyebrow">GENERATED {new Date(report.createdAt).toLocaleDateString()}</span><h2>{report.narrative}</h2></div><div className="intel-grid"><Insight title="Emerging pattern" text={report.pattern}/><Insight title="Important gap" text={report.gap}/><Insight title="Next move" text={report.priority}/></div><button className="secondary" onClick={generate} disabled={busy}>{busy?"Refreshing…":"Refresh interpretation"}</button>{error&&<p className="notice">{error}</p>}</section>:<section className="intelligence empty"><b>✦</b><strong>Your first learning review is ready when you are</strong><p>{st.done.length?`You have ${st.done.length} completed session${st.done.length===1?"":"s"}. The first report will be tentative; it becomes more useful as your evidence grows.`:"Complete one focus session to create your first learning review."}</p><button className="primary" disabled={busy||!st.done.length} onClick={generate}>{busy?"Reading your evidence…":"Generate Learning Intelligence →"}</button>{error&&<p className="notice">{error}</p>}</section>}<section className="grid two"><div className="panel"><span className="eyebrow">DETERMINISTIC EVIDENCE</span><h2>What’s been measured</h2><p className="facts">{minutes(st.week)} in the last 7 days · {st.done.length} completed sessions · {st.streak}-day active streak</p><Balance st={st}/></div><div className="panel"><span className="eyebrow">AI USE, WITH INTENTION</span><h2>Not a generic chatbot</h2><p>AI reads your actual balance, topics, and independence signals only when you ask. Its conclusions are useful signals, not objective truth.</p></div></section></>}
-function Proof({goal,st,report}:{goal:Goal;st:ReturnType<typeof stats>;report?:Report}){const copy=()=>navigator.clipboard?.writeText(`${goal.title} — ${minutes(st.total)} of focused learning across ${st.done.length} completed sessions. ${st.streak}-day active streak. Top focus: ${st.top.map(x=>x[0]).slice(0,3).join(", ")}.`);return <><div className="proof-actions"><button className="secondary" onClick={copy}>Copy summary</button><button className="primary" onClick={()=>window.print()}>Print / Save as PDF</button></div><article className="proof"><span className="eyebrow">PROOF OF LEARNING · LOCAL RECORD</span><h1>{goal.title}</h1><p>{goal.description||"A self-directed learning journey."}</p><div className="proof-stats"><Stat value={minutes(st.total)} label="focused evidence"/><Stat value={`${st.streak} days`} label="current active streak"/><Stat value={String(st.done.length)} label="completed sessions"/></div><div className="proof-section"><h3>How the work was done</h3><Balance st={st}/></div><div className="proof-section"><h3>Skills with repeated evidence</h3><p>{st.top.map(x=>x[0]).join(" · ")||"Evidence will appear after the first session."}</p></div>{report&&<div className="proof-section quote"><h3>Learning Intelligence</h3><p>“{report.narrative}”</p><b>Next: {report.priority}</b></div>}<footer>Generated locally in Learning Arc. This is a personal activity record, not a credential or certification.</footer></article></>}
-function Settings({store,update,editGoal}:{store:Store;update:(p:Partial<Store>)=>void;editGoal:()=>void}){const input=useRef<HTMLInputElement>(null);const download=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(store,null,2)],{type:"application/json"}));a.download="learning-arc-backup.json";a.click();URL.revokeObjectURL(a.href)};const imported=(f?:File)=>{if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const data=JSON.parse(String(reader.result));if(!validateImport(data))throw Error();if(confirm("Replace the current local journey with this backup?"))update(data)}catch{alert("This file is not a valid Learning Arc backup.")}};reader.readAsText(f)};return <><div className="page-head"><span className="eyebrow">SETTINGS & DATA</span><h1>Your journey stays with you.</h1><p>Learning Arc stores your data in this browser. Export it regularly if it matters to you.</p></div><div className="settings"><section className="panel"><h2>Goal</h2><p>{store.goal?.title} · {store.goal?.duration}</p><button className="secondary" onClick={editGoal}>Edit goal</button></section><section className="panel"><h2>Backup your data</h2><p>Export includes your goal, sessions, reflections, AI analyses, and saved review.</p><button className="primary" onClick={download}>Export complete journey</button><input className="sr-only" ref={input} type="file" accept="application/json" onChange={e=>imported(e.target.files?.[0])}/><button className="secondary" onClick={()=>input.current?.click()}>Import backup</button></section><section className="panel"><h2>Demo mode</h2><p>Load a believable multi-week journey for your hackathon demo. This never overwrites data without confirmation.</p><button className="secondary" onClick={()=>{if(confirm("Replace current local data with the demo journey? Export first if you need it."))update(seed())}}>Load demo journey</button></section><section className="panel danger-zone"><h2>Reset local data</h2><p>This permanently clears the journey from this browser.</p><button className="text danger" onClick={()=>{if(confirm("Seriously reset all local Learning Arc data? This cannot be undone."))update(EMPTY)}}>Reset all data</button></section></div></>}
+function useContributionIntensity(sessions: Session[]) {
+    useEffect(() => {
+        const daily = sessions.reduce<Record<string, number>>((total, session) => {
+            const day = localDay(session.completedAt);
+            total[day] = (total[day] || 0) + session.duration;
+            return total;
+        }, {});
+        document.querySelectorAll<HTMLButtonElement>(".calendar .day").forEach((button) => {
+            const day = button.getAttribute("aria-label")?.slice(0, 10) || "",
+                minutes = daily[day] || 0,
+                level =
+                    minutes === 0
+                        ? 0
+                        : minutes <= 60
+                        ? 1
+                        : minutes <= 120
+                        ? 2
+                        : minutes <= 180
+                        ? 3
+                        : minutes <= 240
+                        ? 4
+                        : 5;
+            button.classList.remove("level-0", "level-1", "level-2", "level-3", "level-4", "level-5");
+            button.classList.add(`level-${level}`);
+        });
+        document.querySelectorAll<HTMLElement>(".journey .legend").forEach((legend) => {
+            legend.replaceChildren();
+            const less = document.createElement("span");
+            less.textContent = "Less";
+            legend.append(less);
+            for (let level = 1; level <= 5; level++) {
+                const swatch = document.createElement("i");
+                swatch.className = `level-${level}`;
+                legend.append(swatch);
+            }
+            const more = document.createElement("span");
+            more.textContent = "More";
+            legend.append(more);
+        });
+    }, [sessions]);
+}
+function useCustomActivityLabels(sessions: Session[]) {
+    useEffect(() => {
+        document.querySelectorAll<HTMLElement>(".event").forEach((event) => {
+            event.querySelector(".custom-activity")?.remove();
+            const topic = event.querySelector("strong")?.textContent,
+                session = sessions.find((item) => item.topic === topic && item.mode === "Other" && item.customActivity);
+            if (session) {
+                const label = document.createElement("small");
+                label.className = "custom-activity";
+                label.textContent = `Other activity: ${session.customActivity}`;
+                event.querySelector("div:last-child")?.append(label);
+            }
+        });
+    }, [sessions]);
+}
+function useGoalPlaceholders() {
+    useEffect(() => {
+        document.querySelectorAll<HTMLLabelElement>(".goal-form label").forEach((label) => {
+            const input = label.querySelector<HTMLInputElement>("input[type=text],input:not([type])"),
+                area = label.querySelector<HTMLTextAreaElement>("textarea");
+            if (input && !input.placeholder) input.placeholder = "e.g. Speak English confidently";
+            if (area && !area.placeholder)
+                area.placeholder = "e.g. I want to communicate confidently in interviews and everyday conversations.";
+        });
+    }, []);
+}
+function Reflection({
+    goal,
+    base,
+    complete,
+}: {
+    goal: Goal;
+    base: {mode: Mode; topic: string; intent: string; duration: number};
+    complete: (s: Session) => void;
+}) {
+    return <ReflectionPlain goal={goal} base={base} complete={complete} />;
+}
+const independence: Independence[] = [
+    "Following a tutorial",
+    "With significant guidance",
+    "With some guidance",
+    "Mostly independently",
+    "Completely independently",
+];
+function ModeMark({mode}: {mode: Mode}) {
+    return <span className={`mode ${mode.toLowerCase()}`}>{mode}</span>;
+}
+function ThemeToggle() {
+    const [dark, setDark] = useState(false);
+    useEffect(() => {
+        const saved = localStorage.getItem("learning-arc-theme");
+        const next = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+        setDark(next);
+        document.documentElement.dataset.theme = next ? "dark" : "light";
+    }, []);
+    const toggle = () => {
+        const next = !dark;
+        setDark(next);
+        document.documentElement.dataset.theme = next ? "dark" : "light";
+        localStorage.setItem("learning-arc-theme", next ? "dark" : "light");
+    };
+    return (
+        <button className="theme-toggle" onClick={toggle} aria-label={`Switch to ${dark ? "light" : "dark"} mode`}>
+            <span>{dark ? "☾" : "☀"}</span>
+            <i>{dark ? "Dark" : "Light"}</i>
+        </button>
+    );
+}
+export default function LearningArc() {
+    const [store, setStore] = useState<Store>(EMPTY),
+        [ready, setReady] = useState(false),
+        [screen, setScreen] = useState<Screen>("today"),
+        [onboard, setOnboard] = useState(false),
+        [menuOpen, setMenuOpen] = useState(false);
+    useEffect(() => {
+        const s = load();
+        setStore(s);
+        setOnboard(!s.goal);
+        setReady(true);
+    }, []);
+    useEffect(() => {
+        if (ready) save(store);
+    }, [store, ready]);
+    const st = useMemo(() => stats(store.sessions), [store.sessions]);
+    useContributionIntensity(store.sessions);
+    useCustomActivityLabels(store.sessions);
+    useGoalPlaceholders();
+    const update = (patch: Partial<Store>) => setStore((s) => ({...s, ...patch}));
+    if (!ready) return <main className="loading">Loading your learning arc…</main>;
+    if (onboard)
+        return (
+            <>
+                <GoalSetup
+                    initial={store.goal}
+                    onDone={(g) => {
+                        update({goal: g});
+                        setOnboard(false);
+                    }}
+                />
+                <ThemeToggle />
+            </>
+        );
+    const retrySession = async (id: string) => {
+        const session = store.sessions.find((s) => s.id === id);
+        if (!session) return;
+        const r = await fetch("/api/analyze", {
+            method: "POST",
+            headers: {"content-type": "application/json"},
+            body: JSON.stringify({kind: "session", goal: store.goal, data: session}),
+        });
+        if (!r.ok) throw Error();
+        const analysis = (await r.json()) as Analysis;
+        setStore((current) => ({
+            ...current,
+            sessions: current.sessions.map((s) => (s.id === id ? {...s, analysis, analysisError: false} : s)),
+        }));
+    };
+    return (
+        <main>
+            <header>
+                <button
+                    className="brand"
+                    onClick={() => {
+                        setScreen("today");
+                        setMenuOpen(false);
+                    }}
+                    aria-label="Learning Arc home"
+                >
+                    <i>↗</i> Learning Arc
+                </button>
+
+                <button
+                    className="menu-toggle"
+                    type="button"
+                    onClick={() => setMenuOpen((open) => !open)}
+                    aria-expanded={menuOpen}
+                    aria-label="Toggle navigation menu"
+                >
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+
+                <nav className={menuOpen ? "nav-open" : ""}>
+                    {(["today", "focus", "journey", "insights", "proof", "settings"] as Screen[]).map((x) => (
+                        <button
+                            key={x}
+                            onClick={() => {
+                                setScreen(x);
+                                setMenuOpen(false);
+                            }}
+                            className={screen === x ? "active" : ""}
+                        >
+                            {x}
+                        </button>
+                    ))}
+                </nav>
+
+                <button
+                    className="goal-chip"
+                    onClick={() => {
+                        setScreen("settings");
+                        setMenuOpen(false);
+                    }}
+                >
+                    {store.goal?.title}
+                </button>
+            </header>
+            <section className="app">
+                {screen === "today" && (
+                    <Today goal={store.goal!} st={st} sessions={store.sessions} go={setScreen} retry={retrySession} />
+                )}{" "}
+                {screen === "focus" && (
+                    <PomodoroFocus
+                        goal={store.goal!}
+                        done={(session) => {
+                            update({sessions: [...store.sessions, session]});
+                            setScreen("today");
+                        }}
+                    />
+                )}{" "}
+                {screen === "journey" && <Journey sessions={store.sessions} st={st} />}{" "}
+                {screen === "insights" && <InsightsFixed store={store} st={st} update={update} />}{" "}
+                {screen === "proof" && <Proof goal={store.goal!} st={st} report={store.report} />}{" "}
+                {screen === "settings" && <Settings store={store} update={update} editGoal={() => setOnboard(true)} />}
+            </section>
+            <ThemeToggle />
+        </main>
+    );
+}
+function GoalSetup({initial, onDone}: {initial?: Goal; onDone: (g: Goal) => void}) {
+    const known = ["30 days", "90 days", "180 days"],
+        initialDuration = initial?.duration || "90 days",
+        [title, setTitle] = useState(initial?.title || ""),
+        [description, setDescription] = useState(initial?.description || ""),
+        [duration, setDuration] = useState(known.includes(initialDuration) ? initialDuration : "Custom"),
+        [customDays, setCustomDays] = useState(
+            known.includes(initialDuration) ? "" : initialDuration.replace(/\D/g, "")
+        );
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        const days = Number(customDays);
+        if (!title.trim() || (duration === "Custom" && (!Number.isInteger(days) || days < 1 || days > 3650))) return;
+        onDone({
+            title: title.trim(),
+            description: description.trim(),
+            duration: duration === "Custom" ? `${days} days` : duration,
+            createdAt: initial?.createdAt || new Date().toISOString(),
+        });
+    };
+    return (
+        <main className="onboard">
+            <div className="orb" />
+            <div className="onboard-copy">
+                <span className="eyebrow">LEARNING, MADE VISIBLE</span>
+                <h1>
+                    Give your learning
+                    <br />
+                    <em>a clear direction.</em>
+                </h1>
+                <p>Learning Arc turns focused effort into a visible journey. Your data stays on this device.</p>
+                <div className="loop">
+                    DECLARE <b>→</b> FOCUS <b>→</b> PROVE <b>→</b> GROW
+                </div>
+            </div>
+            <form className="goal-form" onSubmit={submit}>
+                <span className="eyebrow">{initial ? "EDIT DIRECTION" : "START WITH A DIRECTION"}</span>
+                <h2>What are you trying to achieve?</h2>
+                <label>
+                    Goal title
+                    <input
+                        autoFocus
+                        maxLength={120}
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        required
+                    />
+                </label>
+                <label>
+                    Why does it matter? <small>optional</small>
+                    <textarea maxLength={500} value={description} onChange={(e) => setDescription(e.target.value)} />
+                </label>
+                <fieldset>
+                    <legend>Target horizon</legend>
+                    {[...known, "Custom"].map((x) => (
+                        <label className="pill" key={x}>
+                            <input type="radio" checked={duration === x} onChange={() => setDuration(x)} />
+                            {x}
+                        </label>
+                    ))}
+                    {duration === "Custom" && (
+                        <label>
+                            Custom number of days
+                            <input
+                                type="number"
+                                min="1"
+                                max="3650"
+                                value={customDays}
+                                onChange={(e) => setCustomDays(e.target.value)}
+                                required
+                            />
+                        </label>
+                    )}
+                </fieldset>
+                <button className="primary">
+                    {initial ? "Save goal" : "Begin my learning arc"} <b>→</b>
+                </button>
+            </form>
+        </main>
+    );
+}
+function Onboarding({onDone}: {onDone: (g: Goal) => void}) {
+    void onDone;
+    return null;
+}
+function Today({
+    goal,
+    st,
+    sessions,
+    go,
+    retry,
+}: {
+    goal: Goal;
+    st: ReturnType<typeof stats>;
+    sessions: Session[];
+    go: (s: Screen) => void;
+    retry: (id: string) => Promise<void>;
+}) {
+    const recent = [...sessions].sort((a, b) => +new Date(b.completedAt) - +new Date(a.completedAt)).slice(0, 4);
+    const [retrying, setRetrying] = useState<string>();
+    const retryAnalysis = async (id: string) => {
+        setRetrying(id);
+        try {
+            await retry(id);
+        } catch {
+            alert("Analysis is still unavailable. Your evidence remains safely saved.");
+        } finally {
+            setRetrying(undefined);
+        }
+    };
+    return (
+        <>
+            <div className="hero">
+                <div>
+                    <span className="eyebrow">TODAY’S DIRECTION</span>
+                    <h1>{goal.title}</h1>
+                    <p>{goal.description || "Turn focused effort into independent capability."}</p>
+                </div>
+                <button className="primary" onClick={() => go("focus")}>
+                    Start a focus session <b>→</b>
+                </button>
+            </div>
+            <div className="stat-row">
+                <Stat value={minutes(st.today)} label="focused today" />
+                <Stat value={`${st.streak} day${st.streak === 1 ? "" : "s"}`} label="current streak" />
+                <Stat value={minutes(st.total)} label="total evidence" />
+                <Stat value={String(st.done.length)} label="sessions completed" />
+            </div>
+            <div className="grid two">
+                <section className="panel">
+                    <div className="panel-head">
+                        <div>
+                            <span className="eyebrow">YOUR LEARNING BALANCE</span>
+                            <h2>How you’ve been growing</h2>
+                        </div>
+                        <button className="text" onClick={() => go("journey")}>
+                            Explore journey →
+                        </button>
+                    </div>
+                    {st.done.length ? (
+                        <Balance st={st} />
+                    ) : (
+                        <Empty
+                            title="Your journey starts with one honest session."
+                            text="Focus on something meaningful, then reflect on what you actually did."
+                        />
+                    )}
+                </section>
+                <section className="panel">
+                    <span className="eyebrow">RECENT EVIDENCE</span>
+                    <h2>Learning events</h2>
+                    {recent.length ? (
+                        recent.map((s) => (
+                            <article className="event" key={s.id}>
+                                <div className="event-dot" />
+                                <div>
+                                    <strong>{s.topic}</strong>
+                                    <p>
+                                        <ModeMark mode={s.mode} /> · {minutes(s.duration)} ·{" "}
+                                        {s.analysis?.evidence || "unanalysed"} evidence
+                                    </p>
+                                    <small>{s.analysis?.summary || s.reflection}</small>
+                                    {s.analysisError && (
+                                        <button
+                                            className="text"
+                                            disabled={retrying === s.id}
+                                            onClick={() => retryAnalysis(s.id)}
+                                        >
+                                            {retrying === s.id ? "Analyzing…" : "Retry analysis"}
+                                        </button>
+                                    )}
+                                </div>
+                            </article>
+                        ))
+                    ) : (
+                        <Empty
+                            title="No sessions yet"
+                            text="Your completed focus sessions will become evidence here."
+                        />
+                    )}
+                </section>
+            </div>
+        </>
+    );
+}
+function Stat({value, label}: {value: string; label: string}) {
+    return (
+        <div className="stat">
+            <strong>{value}</strong>
+            <span>{label}</span>
+        </div>
+    );
+}
+function Empty({title, text}: {title: string; text: string}) {
+    return (
+        <div className="empty">
+            <b>◇</b>
+            <strong>{title}</strong>
+            <p>{text}</p>
+        </div>
+    );
+}
+function FocusFixed({goal, done}: {goal: Goal; done: (s: Session) => void}) {
+    const [mode, setMode] = useState<Mode>("Learning"),
+        [topic, setTopic] = useState(""),
+        [intent, setIntent] = useState(""),
+        [mins, setMins] = useState(25),
+        [started, setStarted] = useState<number>(),
+        [pauseAt, setPauseAt] = useState<number>(),
+        [paused, setPaused] = useState(0),
+        [now, setNow] = useState(0),
+        [reflect, setReflect] = useState(false);
+    useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), 500);
+        return () => clearInterval(id);
+    }, []);
+    const remaining = started
+        ? Math.max(0, mins * 60000 - (now - started - paused - (pauseAt ? now - pauseAt : 0)))
+        : mins * 60000;
+    useEffect(() => {
+        if (started && !pauseAt && remaining === 0) {
+            setReflect(true);
+            setStarted(undefined);
+        }
+    }, [remaining, started, pauseAt]);
+    const begin = () => {
+        if (!topic.trim()) return;
+        const at = Date.now();
+        setNow(at);
+        setStarted(at);
+        setPaused(0);
+        setPauseAt(undefined);
+    };
+    if (reflect) return <Reflection goal={goal} base={{mode, topic, intent, duration: mins}} complete={done} />;
+    return (
+        <div className="focus">
+            <div className="focus-setup">
+                <span className="eyebrow">FOCUS WITH INTENTION</span>
+                <h1>{started ? "Stay with the work." : "What are you working on?"}</h1>
+                {!started && (
+                    <>
+                        <div className="mode-list">
+                            {MODES.map((m) => (
+                                <button key={m} onClick={() => setMode(m)} className={mode === m ? "selected" : ""}>
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+                        <label>
+                            Topic
+                            <input
+                                value={topic}
+                                onChange={(e) => setTopic(e.target.value)}
+                                maxLength={80}
+                                placeholder="Async JavaScript"
+                            />
+                        </label>
+                        <label>
+                            What do you want to accomplish? <small>optional</small>
+                            <input
+                                value={intent}
+                                onChange={(e) => setIntent(e.target.value)}
+                                maxLength={240}
+                                placeholder="Understand async/await well enough to use it"
+                            />
+                        </label>
+                        <div className="presets">
+                            {[25, 50].map((x) => (
+                                <button className={mins === x ? "selected" : ""} onClick={() => setMins(x)} key={x}>
+                                    {x} min
+                                </button>
+                            ))}
+                            <input
+                                aria-label="Custom minutes"
+                                type="number"
+                                min="1"
+                                max="240"
+                                value={mins}
+                                onChange={(e) => setMins(Math.min(240, Math.max(1, +e.target.value || 1)))}
+                            />
+                        </div>
+                    </>
+                )}
+            </div>
+            <div className="timer">
+                <span>{started ? "FOCUSING ON" : "READY WHEN YOU ARE"}</span>
+                <strong>
+                    {String(Math.ceil(remaining / 60000)).padStart(2, "0")}
+                    <i>:</i>
+                    {String(Math.floor(remaining / 1000) % 60).padStart(2, "0")}
+                </strong>
+                <p>{topic || "Choose a topic to begin"}</p>
+                {started ? (
+                    <div>
+                        <button
+                            className="secondary"
+                            onClick={() => {
+                                if (pauseAt) {
+                                    setPaused((p) => p + Date.now() - pauseAt);
+                                    setPauseAt(undefined);
+                                } else setPauseAt(Date.now());
+                            }}
+                        >
+                            {pauseAt ? "Resume" : "Pause"}
+                        </button>
+                        <button
+                            className="text danger"
+                            onClick={() => {
+                                setStarted(undefined);
+                                setPauseAt(undefined);
+                            }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                ) : (
+                    <button className="primary" onClick={begin} disabled={!topic.trim()}>
+                        Start focus →
+                    </button>
+                )}
+                <button
+                    className="debug"
+                    onClick={() => {
+                        if (topic.trim()) {
+                            const at = Date.now() - 59000;
+                            setMins(1);
+                            setNow(at);
+                            setStarted(at);
+                        }
+                    }}
+                >
+                    Developer: complete a 1-minute test session
+                </button>
+            </div>
+        </div>
+    );
+}
+function PomodoroFocus({goal, done}: {goal: Goal; done: (s: Session) => void}) {
+    const [mode, setMode] = useState<Mode>("Learning"),
+        [customActivity, setCustomActivity] = useState(""),
+        [topic, setTopic] = useState(""),
+        [intent, setIntent] = useState(""),
+        [focusMins, setFocusMins] = useState(25),
+        [shortMins, setShortMins] = useState(5),
+        [longMins, setLongMins] = useState(15),
+        [cycles, setCycles] = useState(4),
+        [autoStart, setAutoStart] = useState(false);
+    const [phase, setPhase] = useState<"focus" | "short" | "long">("focus"),
+        [completed, setCompleted] = useState(0),
+        [started, setStarted] = useState<number>(),
+        [pauseAt, setPauseAt] = useState<number>(),
+        [paused, setPaused] = useState(0),
+        [now, setNow] = useState(0),
+        [waiting, setWaiting] = useState(false),
+        [reflect, setReflect] = useState(false);
+    const sounded = useRef(false);
+    useEffect(() => {
+        setAutoStart(localStorage.getItem("learning-arc-auto-start") === "true");
+        const id = setInterval(() => setNow(Date.now()), 250);
+        return () => {
+            clearInterval(id);
+            document.title = "Learning Arc";
+        };
+    }, []);
+    useEffect(() => {
+        localStorage.setItem("learning-arc-auto-start", String(autoStart));
+    }, [autoStart]);
+    const phaseMins = phase === "focus" ? focusMins : phase === "short" ? shortMins : longMins;
+    const remaining = started
+        ? Math.max(0, phaseMins * 60000 - (now - started - paused - (pauseAt ? now - pauseAt : 0)))
+        : phaseMins * 60000;
+    const seconds = Math.ceil(remaining / 1000);
+    useTimerRing(remaining, phaseMins);
+    useEffect(() => {
+        if (started && !pauseAt)
+            document.title = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(
+                2,
+                "0"
+            )} • ${phase === "focus" ? "Focus" : "Break"} | Learning Arc`;
+        else document.title = "Learning Arc";
+    }, [started, pauseAt, seconds, phase]);
+    const sound = () => {
+        if (sounded.current) return;
+        sounded.current = true;
+        try {
+            const AudioContext =
+                window.AudioContext ||
+                (window as Window & {webkitAudioContext?: typeof window.AudioContext}).webkitAudioContext;
+            if (!AudioContext) return;
+            const context = new AudioContext();
+            [0, 0.72, 1.44].forEach((offset, index) => {
+                const oscillator = context.createOscillator(),
+                    gain = context.createGain(),
+                    at = context.currentTime + offset;
+                oscillator.type = "sine";
+                oscillator.frequency.setValueAtTime([523, 659, 784][index], at);
+                gain.gain.setValueAtTime(0.0001, at);
+                gain.gain.exponentialRampToValueAtTime(0.16, at + 0.035);
+                gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.55);
+                oscillator.connect(gain).connect(context.destination);
+                oscillator.start(at);
+                oscillator.stop(at + 0.58);
+            });
+        } catch {}
+    };
+    const startPhase = () => {
+        if (mode === "Other" && !customActivity.trim()) return;
+        const at = Date.now();
+        sounded.current = false;
+        setNow(at);
+        setStarted(at);
+        setPaused(0);
+        setPauseAt(undefined);
+        setWaiting(false);
+    };
+    useEffect(() => {
+        if (!started || pauseAt || remaining !== 0) return;
+        sound();
+        const next = phase === "focus" ? completed + 1 : completed;
+        const nextPhase =
+            phase === "focus" ? (next >= cycles ? "long" : "short") : phase === "short" ? "focus" : "long";
+        if (phase === "long") {
+            setReflect(true);
+            setStarted(undefined);
+        } else {
+            setCompleted(next);
+            setPhase(nextPhase);
+            if (autoStart) startPhase();
+            else {
+                setStarted(undefined);
+                setWaiting(true);
+            }
+        }
+    }, [remaining, started, pauseAt, phase, completed, cycles, autoStart]);
+    useOtherActivityInput(mode, customActivity, setCustomActivity);
+    const cancel = () => {
+        setStarted(undefined);
+        setPauseAt(undefined);
+        setWaiting(false);
+        setPhase("focus");
+        setCompleted(0);
+        setPaused(0);
+        setNow(0);
+    };
+    const active = !!started;
+    const begun = active || waiting || completed > 0 || phase !== "focus";
+    if (reflect)
+        return (
+            <ReflectionPlain
+                goal={goal}
+                base={{
+                    mode,
+                    customActivity: mode === "Other" ? customActivity : undefined,
+                    topic,
+                    intent,
+                    duration: focusMins * cycles,
+                }}
+                complete={done}
+            />
+        );
+    const nextLabel =
+        phase === "short"
+            ? "Start Break"
+            : phase === "long"
+            ? "Start Long Break"
+            : completed
+            ? "Start Next Focus"
+            : "Start Pomodoro round →";
+    return (
+        <div className="focus">
+            <div className="focus-setup">
+                <span className="eyebrow">CUSTOM POMODORO</span>
+                <h1>
+                    {active
+                        ? phase === "focus"
+                            ? "Stay with the work."
+                            : "Step away. You earned it."
+                        : waiting
+                        ? "Timer complete."
+                        : "Design your focus round."}
+                </h1>
+                {!begun && (
+                    <>
+                        <div className="mode-list">
+                            {MODES.map((m) => (
+                                <button key={m} onClick={() => setMode(m)} className={mode === m ? "selected" : ""}>
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+                        <label>
+                            Topic
+                            <input
+                                value={topic}
+                                onChange={(e) => setTopic(e.target.value)}
+                                maxLength={80}
+                                placeholder="Async JavaScript"
+                            />
+                        </label>
+                        <label>
+                            What do you want to accomplish? <small>optional</small>
+                            <input
+                                value={intent}
+                                onChange={(e) => setIntent(e.target.value)}
+                                maxLength={240}
+                                placeholder="Understand async/await well enough to use it"
+                            />
+                        </label>
+                        <div className="pomodoro-settings">
+                            <label>
+                                Focus minutes
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="120"
+                                    value={focusMins}
+                                    onChange={(e) => setFocusMins(Math.max(1, Math.min(120, +e.target.value || 1)))}
+                                />
+                            </label>
+                            <label>
+                                Short break
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="60"
+                                    value={shortMins}
+                                    onChange={(e) => setShortMins(Math.max(1, Math.min(60, +e.target.value || 1)))}
+                                />
+                            </label>
+                            <label>
+                                Focus cycles
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="8"
+                                    value={cycles}
+                                    onChange={(e) => setCycles(Math.max(1, Math.min(8, +e.target.value || 1)))}
+                                />
+                            </label>
+                            <label>
+                                Long break
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="90"
+                                    value={longMins}
+                                    onChange={(e) => setLongMins(Math.max(1, Math.min(90, +e.target.value || 1)))}
+                                />
+                            </label>
+                        </div>
+                        <label className="toggle">
+                            <input
+                                type="checkbox"
+                                checked={autoStart}
+                                onChange={(e) => setAutoStart(e.target.checked)}
+                            />{" "}
+                            Auto-start next timer
+                        </label>
+                        <p className="fine">
+                            {focusMins}m focus → {shortMins}m break × {cycles} → {longMins}m long break
+                        </p>
+                    </>
+                )}
+            </div>
+            <div className="timer">
+                <span>
+                    {active
+                        ? `${phase === "focus" ? "FOCUS" : "BREAK"} · ${
+                              phase === "focus"
+                                  ? `CYCLE ${completed + 1} OF ${cycles}`
+                                  : phase === "long"
+                                  ? "LONG BREAK"
+                                  : "SHORT BREAK"
+                          }`
+                        : waiting
+                        ? "READY FOR THE NEXT PHASE"
+                        : "READY WHEN YOU ARE"}
+                </span>
+                <strong>
+                    {String(Math.floor(seconds / 60)).padStart(2, "0")}
+                    <i>:</i>
+                    {String(seconds % 60).padStart(2, "0")}
+                </strong>
+                <p>
+                    {phase === "focus"
+                        ? topic || "Choose a topic to begin"
+                        : phase === "long"
+                        ? "Take a real reset before reflecting."
+                        : "Rest your attention; start when you are ready."}
+                </p>
+                {active ? (
+                    <div>
+                        <button
+                            className="secondary"
+                            onClick={() => {
+                                if (pauseAt) {
+                                    setPaused((p) => p + Date.now() - pauseAt);
+                                    setPauseAt(undefined);
+                                } else setPauseAt(Date.now());
+                            }}
+                        >
+                            {pauseAt ? "Resume" : "Pause"}
+                        </button>
+                        <button className="text danger" onClick={cancel}>
+                            Cancel round
+                        </button>
+                    </div>
+                ) : (
+                    <div>
+                        <button className="primary" onClick={startPhase} disabled={!topic.trim()}>
+                            {nextLabel}
+                        </button>
+                        {begun && (
+                            <button className="text danger" onClick={cancel}>
+                                Cancel round
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+function Balance({st}: {st: ReturnType<typeof stats>}) {
+    return (
+        <div className="balance">
+            {MODES.filter((m) => m !== "Other").map((m) => {
+                const n = st.byMode[m] || 0,
+                    p = st.total ? Math.round((n / st.total) * 100) : 0;
+                return (
+                    <div key={m}>
+                        <span>{m}</span>
+                        <div className="bar">
+                            <i className={m.toLowerCase()} style={{width: `${p}%`}} />
+                        </div>
+                        <b>{p}%</b>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+function Focus({goal, done}: {goal: Goal; done: (s: Session) => void}) {
+    const [mode, setMode] = useState<Mode>("Learning"),
+        [topic, setTopic] = useState(""),
+        [intent, setIntent] = useState(""),
+        [mins, setMins] = useState(25),
+        [started, setStarted] = useState<number>(),
+        [pauseAt, setPauseAt] = useState<number>(),
+        [paused, setPaused] = useState(0),
+        [now, setNow] = useState(Date.now()),
+        [reflect, setReflect] = useState(false);
+    const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
+    useEffect(() => {
+        ticker.current = setInterval(() => setNow(Date.now()), 500);
+        return () => {
+            if (ticker.current) clearInterval(ticker.current);
+        };
+    }, []);
+    const remaining = started
+        ? Math.max(0, mins * 60000 - (now - started - paused - (pauseAt ? now - pauseAt : 0)))
+        : mins * 60000;
+    useEffect(() => {
+        if (started && !pauseAt && remaining === 0) {
+            setReflect(true);
+            setStarted(undefined);
+        }
+    }, [remaining, started, pauseAt]);
+    const begin = () => {
+        if (!topic.trim()) return;
+        setStarted(Date.now());
+        setPaused(0);
+        setPauseAt(undefined);
+    };
+    if (reflect) return <Reflection goal={goal} base={{mode, topic, intent, duration: mins}} complete={done} />;
+    return (
+        <div className="focus">
+            <div className="focus-setup">
+                <span className="eyebrow">FOCUS WITH INTENTION</span>
+                <h1>{started ? "Stay with the work." : "What are you working on?"}</h1>
+                {!started && (
+                    <>
+                        <div className="mode-list">
+                            {MODES.map((m) => (
+                                <button key={m} onClick={() => setMode(m)} className={mode === m ? "selected" : ""}>
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
+                        <label>
+                            Topic
+                            <input
+                                value={topic}
+                                onChange={(e) => setTopic(e.target.value)}
+                                maxLength={80}
+                                placeholder="Async JavaScript"
+                            />
+                        </label>
+                        <label>
+                            What do you want to accomplish? <small>optional</small>
+                            <input
+                                value={intent}
+                                onChange={(e) => setIntent(e.target.value)}
+                                maxLength={240}
+                                placeholder="Understand async/await well enough to use it"
+                            />
+                        </label>
+                        <div className="presets">
+                            {[25, 50].map((x) => (
+                                <button className={mins === x ? "selected" : ""} onClick={() => setMins(x)} key={x}>
+                                    {x} min
+                                </button>
+                            ))}
+                            <input
+                                aria-label="Custom minutes"
+                                type="number"
+                                min="1"
+                                max="240"
+                                value={mins}
+                                onChange={(e) => setMins(Math.min(240, Math.max(1, +e.target.value || 1)))}
+                            />
+                        </div>
+                    </>
+                )}
+            </div>
+            <div className="timer">
+                <span>{started ? "FOCUSING ON" : "READY WHEN YOU ARE"}</span>
+                <strong>
+                    {String(Math.ceil(remaining / 60000)).padStart(2, "0")}
+                    <i>:</i>
+                    {String(Math.floor(remaining / 1000) % 60).padStart(2, "0")}
+                </strong>
+                <p>{topic || "Choose a topic to begin"}</p>
+                {started ? (
+                    <div>
+                        <button
+                            className="secondary"
+                            onClick={() => {
+                                if (pauseAt) {
+                                    setPaused((p) => p + Date.now() - pauseAt);
+                                    setPauseAt(undefined);
+                                } else setPauseAt(Date.now());
+                            }}
+                        >
+                            {pauseAt ? "Resume" : "Pause"}
+                        </button>
+                        <button
+                            className="text danger"
+                            onClick={() => {
+                                setStarted(undefined);
+                                setPauseAt(undefined);
+                            }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                ) : (
+                    <button className="primary" onClick={begin} disabled={!topic.trim()}>
+                        Start focus <b>→</b>
+                    </button>
+                )}
+                <button
+                    className="debug"
+                    onClick={() => {
+                        if (topic.trim()) {
+                            setMins(1);
+                            setStarted(Date.now() - 59000);
+                        }
+                    }}
+                >
+                    Developer: complete a 1-minute test session
+                </button>
+            </div>
+        </div>
+    );
+}
+function ReflectionReliable({
+    goal,
+    base,
+    complete,
+}: {
+    goal: Goal;
+    base: {mode: Mode; customActivity?: string; topic: string; intent: string; duration: number};
+    complete: (s: Session) => void;
+}) {
+    const [reflection, setReflection] = useState(""),
+        [ind, setInd] = useState<Independence>("With some guidance"),
+        [difficulty, setDifficulty] = useState(""),
+        [busy, setBusy] = useState(false),
+        [message, setMessage] = useState(""),
+        [listening, setListening] = useState(false),
+        [supported, setSupported] = useState(false);
+    const recognition = useRef<Recognition | null>(null),
+        stopping = useRef(false);
+    useEffect(() => {
+        const w = window as SpeechWindow;
+        setSupported(!!(w.SpeechRecognition || w.webkitSpeechRecognition));
+        return () => {
+            stopping.current = true;
+            recognition.current?.abort();
+        };
+    }, []);
+    const toggle = () => {
+        if (listening) {
+            stopping.current = true;
+            recognition.current?.stop();
+            return;
+        }
+        const w = window as SpeechWindow,
+            Speech = w.SpeechRecognition || w.webkitSpeechRecognition;
+        if (!Speech) return;
+        const next = new Speech();
+        next.continuous = true;
+        next.interimResults = false;
+        next.onstart = () => {
+            stopping.current = false;
+            setListening(true);
+            setMessage("");
+        };
+        next.onresult = (event) => {
+            let words = "";
+            for (let i = 0; i < event.results.length; i++) words += `${event.results[i][0]?.transcript || ""} `;
+            if (words.trim()) setReflection((value) => `${value}${value.trim() ? " " : ""}${words.trim()}`);
+        };
+        next.onerror = (event) => {
+            const messages: Record<string, string> = {
+                "no-speech": "No speech was detected. Try again when you are ready.",
+                "audio-capture": "Your microphone could not be accessed. Check your system input.",
+                "not-allowed": "Microphone permission was denied. You can continue typing.",
+                "service-not-allowed": "Speech recognition is unavailable in this browser.",
+                network: "Speech recognition needs a network connection.",
+                aborted: "",
+            };
+            setMessage(messages[event.error] || "Speech recognition could not continue. You can keep typing.");
+        };
+        next.onend = () => {
+            setListening(false);
+            recognition.current = null;
+        };
+        recognition.current = next;
+        try {
+            next.start();
+        } catch {
+            setMessage("Dictation could not start. You can continue typing.");
+        }
+    };
+    const submit = async () => {
+        if (!reflection.trim()) return;
+        setBusy(true);
+        const s: Session = {
+            id: crypto.randomUUID(),
+            startedAt: new Date(Date.now() - base.duration * 60000).toISOString(),
+            completedAt: new Date().toISOString(),
+            ...base,
+            reflection,
+            independence: ind,
+            difficulty,
+        };
+        try {
+            const r = await fetch("/api/analyze", {
+                method: "POST",
+                headers: {"content-type": "application/json"},
+                body: JSON.stringify({kind: "session", goal, data: s}),
+            });
+            if (!r.ok) throw Error();
+            s.analysis = (await r.json()) as Analysis;
+        } catch {
+            s.analysisError = true;
+            setMessage("Your session is safely recorded. AI interpretation can be retried later.");
+        }
+        complete(s);
+        setBusy(false);
+    };
+    return (
+        <div className="reflection">
+            <span className="eyebrow">PROVE THE LEARNING</span>
+            <h1>What did you actually do?</h1>
+            <p className="lede">Review your evidence before analysis.</p>
+            <label>
+                What happened in this session?
+                <textarea
+                    autoFocus
+                    maxLength={1200}
+                    value={reflection}
+                    onChange={(e) => setReflection(e.target.value)}
+                />
+            </label>
+            {supported && (
+                <button type="button" className="secondary" onClick={toggle}>
+                    {listening ? "Stop recording" : "🎙 Dictate evidence"}
+                </button>
+            )}
+            {listening && <p className="fine">Listening… speak naturally; your words will be added above.</p>}
+            <fieldset>
+                <legend>How independently did you work?</legend>
+                <div className="independence">
+                    {independence.map((x) => (
+                        <button type="button" className={ind === x ? "selected" : ""} onClick={() => setInd(x)} key={x}>
+                            {x}
+                        </button>
+                    ))}
+                </div>
+            </fieldset>
+            <label>
+                What was difficult? <small>optional</small>
+                <input maxLength={300} value={difficulty} onChange={(e) => setDifficulty(e.target.value)} />
+            </label>
+            {message && <p className="notice">{message}</p>}
+            <button className="primary" disabled={busy || !reflection.trim()} onClick={submit}>
+                {busy ? "Interpreting your progress…" : "Analyze my progress →"}
+            </button>
+        </div>
+    );
+}
+function Journey({sessions, st}: {sessions: Session[]; st: ReturnType<typeof stats>}) {
+    const [selected, setSelected] = useState<string>();
+    const start = new Date();
+    start.setDate(start.getDate() - 83);
+    const days = Array.from({length: 84}, (_, i) => {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        return localDay(d.toISOString());
+    });
+    const events = selected ? sessions.filter((s) => localDay(s.completedAt) === selected) : [];
+    return (
+        <>
+            <div className="page-head">
+                <span className="eyebrow">LEARNING JOURNEY</span>
+                <h1>The story of your effort.</h1>
+                <p>Activity is not a score—it’s evidence you can return to and build upon.</p>
+            </div>
+            <section className="panel journey">
+                <div className="calendar">
+                    {days.map((day) => {
+                        const n = st.daily[day] || 0;
+                        return (
+                            <button
+                                aria-label={`${day}: ${n} minutes`}
+                                onClick={() => setSelected(day)}
+                                key={day}
+                                className={`day ${n > 0 ? (n >= 50 ? "deep" : "active") : ""} ${
+                                    selected === day ? "chosen" : ""
+                                }`}
+                            />
+                        );
+                    })}
+                </div>
+                <div className="legend">
+                    <span>less</span>
+                    <i />
+                    <i className="active" />
+                    <i className="deep" />
+                    <span>more meaningful focus</span>
+                </div>
+            </section>
+            <div className="grid two">
+                <section className="panel">
+                    <span className="eyebrow">SKILL EVOLUTION</span>
+                    <h2>Repeated evidence, not credentials</h2>
+                    <div className="skills">
+                        {Object.entries(
+                            sessions.reduce<Record<string, Session[]>>((a, s) => {
+                                (s.analysis?.skills || [s.topic]).forEach((k) => (a[k] = a[k] || []).push(s));
+                                return a;
+                            }, {})
+                        )
+                        .sort((a, b) => b[1].length - a[1].length)
+                        .slice(0, 8)
+                        .map(([skill, items]) => {
+                            const stage = items.some((i) => i.mode === "Building")
+                                ? "Applied"
+                                : items.some((i) => i.mode === "Practicing")
+                                ? "Practiced"
+                                : "Learned";
+                            return (
+                                <div key={skill}>
+                                    <strong>{skill}</strong>
+                                    <span>{stage}</span>
+                                    <i style={{width: `${Math.min(100, items.length * 28)}%`}} />
+                                </div>
+                            );
+                        })}
+                        {!sessions.length && (
+                            <Empty
+                                title="Skills appear as you log evidence"
+                                text="The system looks for recurring topics across your sessions."
+                            />
+                        )}
+                    </div>
+                </section>
+                <section className="panel">
+                    <span className="eyebrow">DAY DETAIL</span>
+                    <h2>
+                        {selected
+                            ? new Date(`${selected}T12:00:00`).toLocaleDateString(undefined, {
+                                  month: "long",
+                                  day: "numeric",
+                              })
+                            : "Select a day"}
+                    </h2>
+                    {selected ? (
+                        events.length ? (
+                            events.map((e) => (
+                                <article className="event" key={e.id}>
+                                    <div className="event-dot" />
+                                    <div>
+                                        <strong>{e.topic}</strong>
+                                        <p>
+                                            <ModeMark mode={e.mode} /> · {minutes(e.duration)}
+                                        </p>
+                                        <small>{e.analysis?.summary || e.reflection}</small>
+                                    </div>
+                                </article>
+                            ))
+                        ) : (
+                            <Empty
+                                title="No completed focus sessions"
+                                text="A quiet day is part of a real journey too."
+                            />
+                        )
+                    ) : (
+                        <Empty title="Explore your pattern" text="Choose an active day to see its learning evidence." />
+                    )}
+                </section>
+            </div>
+        </>
+    );
+}
+function Insights({
+    store,
+    st,
+    update,
+}: {
+    store: Store;
+    st: ReturnType<typeof stats>;
+    update: (p: Partial<Store>) => void;
+}) {
+    const [busy, setBusy] = useState(false),
+        [error, setError] = useState("");
+    const report = store.report;
+    const generate = async () => {
+        if (st.done.length < 3) {
+            setError("Log at least three completed sessions before asking for a meaningful review.");
+            return;
+        }
+        setBusy(true);
+        setError("");
+        try {
+            const facts = {
+                periodDays: 14,
+                totalMinutes: st.week,
+                sessions: st.done.length,
+                modeMinutes: st.byMode,
+                topTopics: st.top,
+                independence: st.done.reduce<Record<string, number>>((a, s) => {
+                    a[s.independence] = (a[s.independence] || 0) + 1;
+                    return a;
+                }, {}),
+                recent: st.done
+                .slice(-10)
+                .map((s) => ({mode: s.mode, topic: s.topic, duration: s.duration, analysis: s.analysis})),
+            };
+            const r = await fetch("/api/analyze", {
+                method: "POST",
+                headers: {"content-type": "application/json"},
+                body: JSON.stringify({kind: "review", goal: store.goal, data: facts}),
+            });
+            if (!r.ok) throw Error();
+            const generated = (await r.json()) as Omit<Report, "createdAt">;
+            update({report: {...generated, createdAt: new Date().toISOString()}});
+        } catch {
+            setError("Learning Intelligence is temporarily unavailable. Your deterministic evidence remains intact.");
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <>
+            <div className="page-head">
+                <span className="eyebrow">LEARNING INTELLIGENCE</span>
+                <h1>Patterns, interpreted carefully.</h1>
+                <p>Deterministic facts from your device + an intentional AI reading of your learning evidence.</p>
+            </div>
+            {report ? (
+                <section className="intelligence">
+                    <div>
+                        <span className="eyebrow">GENERATED {new Date(report.createdAt).toLocaleDateString()}</span>
+                        <h2>{report.narrative}</h2>
+                    </div>
+                    <div className="intel-grid">
+                        <Insight title="Emerging pattern" text={report.pattern} />
+                        <Insight title="Important gap" text={report.gap} />
+                        <Insight title="Next move" text={report.priority} />
+                    </div>
+                    <button className="secondary" onClick={generate} disabled={busy}>
+                        {busy ? "Refreshing…" : "Refresh interpretation"}
+                    </button>
+                </section>
+            ) : (
+                <section className="intelligence empty">
+                    <b>✦</b>
+                    <strong>Give your journey a thoughtful reading</strong>
+                    <p>
+                        Learning Intelligence interprets your actual balance, topics, and independence patterns. It
+                        never replaces the underlying evidence.
+                    </p>
+                    <button className="primary" disabled={busy} onClick={generate}>
+                        {busy ? "Reading your evidence…" : "Generate Learning Intelligence →"}
+                    </button>
+                    {error && <p className="notice">{error}</p>}
+                </section>
+            )}
+            <section className="grid two">
+                <div className="panel">
+                    <span className="eyebrow">DETERMINISTIC EVIDENCE</span>
+                    <h2>What’s been measured</h2>
+                    <p className="facts">
+                        {minutes(st.week)} in the last 7 days · {st.done.length} completed sessions · {st.streak}-day
+                        active streak
+                    </p>
+                    <Balance st={st} />
+                </div>
+                <div className="panel">
+                    <span className="eyebrow">AI USE, WITH INTENTION</span>
+                    <h2>Not a generic chatbot</h2>
+                    <p>
+                        AI interprets a reflection after you choose to analyze it, and interprets this aggregate review
+                        only when you ask. Raw notes are treated as untrusted data, and conclusions are signals—not
+                        facts.
+                    </p>
+                </div>
+            </section>
+        </>
+    );
+}
+function Insight({title, text}: {title: string; text: string}) {
+    return (
+        <div>
+            <span>{title}</span>
+            <p>{text}</p>
+        </div>
+    );
+}
+function InsightsFixed({
+    store,
+    st,
+    update,
+}: {
+    store: Store;
+    st: ReturnType<typeof stats>;
+    update: (p: Partial<Store>) => void;
+}) {
+    const [busy, setBusy] = useState(false),
+        [error, setError] = useState("");
+    const generate = async () => {
+        if (!st.done.length) {
+            setError("Complete one focus session first, then Learning Intelligence can read your evidence.");
+            return;
+        }
+        setBusy(true);
+        setError("");
+        try {
+            const facts = {
+                periodDays: 14,
+                totalMinutes: st.week,
+                sessions: st.done.length,
+                modeMinutes: st.byMode,
+                topTopics: st.top,
+                independence: st.done.reduce<Record<string, number>>((a, s) => {
+                    a[s.independence] = (a[s.independence] || 0) + 1;
+                    return a;
+                }, {}),
+                recent: st.done
+                .slice(-10)
+                .map((s) => ({mode: s.mode, topic: s.topic, duration: s.duration, analysis: s.analysis})),
+            };
+            const r = await fetch("/api/analyze", {
+                method: "POST",
+                headers: {"content-type": "application/json"},
+                body: JSON.stringify({kind: "review", goal: store.goal, data: facts}),
+            });
+            if (!r.ok) throw Error();
+            const generated = (await r.json()) as Omit<Report, "createdAt">;
+            update({report: {...generated, createdAt: new Date().toISOString()}});
+        } catch {
+            setError(
+                "Learning Intelligence is temporarily unavailable. Your completed learning evidence is safely saved—try refreshing later."
+            );
+        } finally {
+            setBusy(false);
+        }
+    };
+    const report = store.report;
+    return (
+        <>
+            <div className="page-head">
+                <span className="eyebrow">LEARNING INTELLIGENCE</span>
+                <h1>Patterns, interpreted carefully.</h1>
+                <p>Deterministic evidence from your device, then an intentional AI interpretation.</p>
+            </div>
+            {report ? (
+                <section className="intelligence">
+                    <div>
+                        <span className="eyebrow">GENERATED {new Date(report.createdAt).toLocaleDateString()}</span>
+                        <h2>{report.narrative}</h2>
+                    </div>
+                    <div className="intel-grid">
+                        <Insight title="Emerging pattern" text={report.pattern} />
+                        <Insight title="Important gap" text={report.gap} />
+                        <Insight title="Next move" text={report.priority} />
+                    </div>
+                    <button className="secondary" onClick={generate} disabled={busy}>
+                        {busy ? "Refreshing…" : "Refresh interpretation"}
+                    </button>
+                    {error && <p className="notice">{error}</p>}
+                </section>
+            ) : (
+                <section className="intelligence empty">
+                    <b>✦</b>
+                    <strong>Your first learning review is ready when you are</strong>
+                    <p>
+                        {st.done.length
+                            ? `You have ${st.done.length} completed session${
+                                  st.done.length === 1 ? "" : "s"
+                              }. The first report will be tentative; it becomes more useful as your evidence grows.`
+                            : "Complete one focus session to create your first learning review."}
+                    </p>
+                    <button className="primary" disabled={busy || !st.done.length} onClick={generate}>
+                        {busy ? "Reading your evidence…" : "Generate Learning Intelligence →"}
+                    </button>
+                    {error && <p className="notice">{error}</p>}
+                </section>
+            )}
+            <section className="grid two">
+                <div className="panel">
+                    <span className="eyebrow">DETERMINISTIC EVIDENCE</span>
+                    <h2>What’s been measured</h2>
+                    <p className="facts">
+                        {minutes(st.week)} in the last 7 days · {st.done.length} completed sessions · {st.streak}-day
+                        active streak
+                    </p>
+                    <Balance st={st} />
+                </div>
+                <div className="panel">
+                    <span className="eyebrow">AI USE, WITH INTENTION</span>
+                    <h2>Not a generic chatbot</h2>
+                    <p>
+                        AI reads your actual balance, topics, and independence signals only when you ask. Its
+                        conclusions are useful signals, not objective truth.
+                    </p>
+                </div>
+            </section>
+        </>
+    );
+}
+function Proof({goal, st, report}: {goal: Goal; st: ReturnType<typeof stats>; report?: Report}) {
+    const copy = () =>
+        navigator.clipboard?.writeText(
+            `${goal.title} — ${minutes(st.total)} of focused learning across ${st.done.length} completed sessions. ${
+                st.streak
+            }-day active streak. Top focus: ${st.top
+            .map((x) => x[0])
+            .slice(0, 3)
+            .join(", ")}.`
+        );
+    return (
+        <>
+            <div className="proof-actions">
+                <button className="secondary" onClick={copy}>
+                    Copy summary
+                </button>
+                <button className="primary" onClick={() => window.print()}>
+                    Print / Save as PDF
+                </button>
+            </div>
+            <article className="proof">
+                <span className="eyebrow">PROOF OF LEARNING · LOCAL RECORD</span>
+                <h1>{goal.title}</h1>
+                <p>{goal.description || "A self-directed learning journey."}</p>
+                <div className="proof-stats">
+                    <Stat value={minutes(st.total)} label="focused evidence" />
+                    <Stat value={`${st.streak} days`} label="current active streak" />
+                    <Stat value={String(st.done.length)} label="completed sessions" />
+                </div>
+                <div className="proof-section">
+                    <h3>How the work was done</h3>
+                    <Balance st={st} />
+                </div>
+                <div className="proof-section">
+                    <h3>Skills with repeated evidence</h3>
+                    <p>{st.top.map((x) => x[0]).join(" · ") || "Evidence will appear after the first session."}</p>
+                </div>
+                {report && (
+                    <div className="proof-section quote">
+                        <h3>Learning Intelligence</h3>
+                        <p>“{report.narrative}”</p>
+                        <b>Next: {report.priority}</b>
+                    </div>
+                )}
+                <footer>
+                    Generated locally in Learning Arc. This is a personal activity record, not a credential or
+                    certification.
+                </footer>
+            </article>
+        </>
+    );
+}
+function Settings({
+    store,
+    update,
+    editGoal,
+}: {
+    store: Store;
+    update: (p: Partial<Store>) => void;
+    editGoal: () => void;
+}) {
+    const input = useRef<HTMLInputElement>(null);
+    const download = () => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(store, null, 2)], {type: "application/json"}));
+        a.download = "learning-arc-backup.json";
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+    const imported = (f?: File) => {
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const data = JSON.parse(String(reader.result));
+                if (!validateImport(data)) throw Error();
+                if (confirm("Replace the current local journey with this backup?")) update(data);
+            } catch {
+                alert("This file is not a valid Learning Arc backup.");
+            }
+        };
+        reader.readAsText(f);
+    };
+    return (
+        <>
+            <div className="page-head">
+                <span className="eyebrow">SETTINGS & DATA</span>
+                <h1>Your journey stays with you.</h1>
+                <p>Learning Arc stores your data in this browser. Export it regularly if it matters to you.</p>
+            </div>
+            <div className="settings">
+                <section className="panel">
+                    <h2>Goal</h2>
+                    <p>
+                        {store.goal?.title} · {store.goal?.duration}
+                    </p>
+                    <button className="secondary" onClick={editGoal}>
+                        Edit goal
+                    </button>
+                </section>
+                <section className="panel">
+                    <h2>Backup your data</h2>
+                    <p>Export includes your goal, sessions, reflections, AI analyses, and saved review.</p>
+                    <button className="primary" onClick={download}>
+                        Export complete journey
+                    </button>
+                    <input
+                        className="sr-only"
+                        ref={input}
+                        type="file"
+                        accept="application/json"
+                        onChange={(e) => imported(e.target.files?.[0])}
+                    />
+                    <button className="secondary" onClick={() => input.current?.click()}>
+                        Import backup
+                    </button>
+                </section>
+                <section className="panel">
+                    <h2>Demo mode</h2>
+                    <p>
+                        Load a believable multi-week journey for your hackathon demo. This never overwrites data without
+                        confirmation.
+                    </p>
+                    <button
+                        className="secondary"
+                        onClick={() => {
+                            if (
+                                confirm(
+                                    "Replace current local data with the demo journey? Export first if you need it."
+                                )
+                            )
+                                update(seed());
+                        }}
+                    >
+                        Load demo journey
+                    </button>
+                </section>
+                <section className="panel danger-zone">
+                    <h2>Reset local data</h2>
+                    <p>This permanently clears the journey from this browser.</p>
+                    <button
+                        className="text danger"
+                        onClick={() => {
+                            if (confirm("Seriously reset all local Learning Arc data? This cannot be undone."))
+                                update(EMPTY);
+                        }}
+                    >
+                        Reset all data
+                    </button>
+                </section>
+            </div>
+        </>
+    );
+}
