@@ -1286,3 +1286,30 @@ legend {
 .menu-toggle[aria-expanded="true"] span:nth-child(3) {
   transform: translateY(-6px) rotate(-45deg);
 }
+
+/* Skill Evolution expandable list */
+.skills-expanded {
+  max-height: 430px;
+  overflow-y: auto;
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) var(--soft);
+}
+
+.skills-expanded::-webkit-scrollbar {
+  width: 6px;
+}
+
+.skills-expanded::-webkit-scrollbar-track {
+  background: var(--soft);
+  border-radius: 99px;
+}
+
+.skills-expanded::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 99px;
+}
+
+.skills-toggle {
+  margin-top: 14px;
+}

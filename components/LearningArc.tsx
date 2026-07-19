@@ -1308,6 +1308,7 @@ function ReflectionReliable({
 }
 function Journey({sessions, st}: {sessions: Session[]; st: ReturnType<typeof stats>}) {
     const [selected, setSelected] = useState<string>();
+    const [showAllSkills, setShowAllSkills] = useState(false);
     const start = new Date();
     start.setDate(start.getDate() - 83);
     const days = Array.from({length: 84}, (_, i) => {
@@ -1351,7 +1352,7 @@ function Journey({sessions, st}: {sessions: Session[]; st: ReturnType<typeof sta
                 <section className="panel">
                     <span className="eyebrow">SKILL EVOLUTION</span>
                     <h2>Repeated evidence, not credentials</h2>
-                    <div className="skills">
+                    <div className={`skills ${showAllSkills ? "skills-expanded" : ""}`}>
                         {Object.entries(
                             sessions.reduce<Record<string, Session[]>>((a, s) => {
                                 (s.analysis?.skills || [s.topic]).forEach((k) => (a[k] = a[k] || []).push(s));
@@ -1359,7 +1360,7 @@ function Journey({sessions, st}: {sessions: Session[]; st: ReturnType<typeof sta
                             }, {})
                         )
                         .sort((a, b) => b[1].length - a[1].length)
-                        .slice(0, 8)
+                        .slice(0, showAllSkills ? undefined : 8)
                         .map(([skill, items]) => {
                             const stage = items.some((i) => i.mode === "Building")
                                 ? "Applied"
@@ -1381,6 +1382,18 @@ function Journey({sessions, st}: {sessions: Session[]; st: ReturnType<typeof sta
                             />
                         )}
                     </div>
+                    {Object.keys(
+                        sessions.reduce<Record<string, Session[]>>((a, s) => {
+                            (s.analysis?.skills || [s.topic]).forEach((k) => {
+                                (a[k] = a[k] || []).push(s);
+                            });
+                            return a;
+                        }, {})
+                    ).length > 8 && (
+                        <button className="text skills-toggle" onClick={() => setShowAllSkills((current) => !current)}>
+                            {showAllSkills ? "Show less" : "Show all skills"}
+                        </button>
+                    )}
                 </section>
                 <section className="panel">
                     <span className="eyebrow">DAY DETAIL</span>
