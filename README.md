@@ -1,110 +1,139 @@
-# Learning Arc
+# Learning Arc v2 — Product Evolution
 
-Learning platforms track what you complete. Productivity apps track how long you work. **Learning Arc turns focused learning into visible evidence of growth.**
+Learning platforms track what you completed; productivity apps track time. **Learning Arc** helps a self-learner understand how they are growing from guided consumption toward independent application.
 
-It helps self-learners see how they are progressing from guided consumption toward practice and independent application—whether they are learning to code, improving their English, preparing for an exam, or developing any new skill.
+Learning Arc v2 evolves the application into a reliable, modern, local-first learning productivity product with a shareable read-only public proof system and a refined visual identity.
 
-## What it does
+---
 
-- Zero-signup, local-first learning journey
-- Goal setting with flexible 30, 90, 180, or custom-day timelines
-- Pomodoro focus system with manual or automatic phase transitions
-- Accurate focus-time tracking across inactive browser tabs
-- Session reflection that records what was learned, difficulties, and learning independence
-- Optional server-side Gemini analysis that summarizes evidence and extracts demonstrated skills
-- GitHub-inspired contribution graph showing learning consistency and focus intensity
-- Skill Evolution that builds from analyzed learning evidence over time
-- Day-by-day learning evidence and learning-mode balance
-- Learning Intelligence that combines deterministic local metrics with intentional AI interpretation
-- Proof of Learning view with print/PDF support
-- JSON export/import for portable local backups
-- Dark and light themes with responsive desktop and mobile navigation
-- A realistic 30-day demo journey for quickly exploring the complete product
-- Graceful AI failure handling—focus sessions, evidence, journeys, and local analytics continue working without Gemini
+## Core Product Loop
 
-## How it works
+```
+DECLARE  →  FOCUS  →  PROVE  →  GROW
+```
 
-**DECLARE → FOCUS → PROVE → GROW**
+1. **DECLARE**: Set a goal direction and target horizon.
+2. **FOCUS**: Execute structured focus cycles with persistent timestamp-based timing.
+3. **PROVE**: Capture candid learning reflections, Web Speech dictation, and evidence.
+4. **GROW**: Track calendar streaks, skill evolution, deterministic metrics, AI Learning Intelligence, and shareable public profile proof.
 
-1. **Declare** a learning goal and timeline.
-2. **Focus** through structured learning sessions.
-3. **Prove** what you actually learned through reflection and evidence.
-4. **Grow** by seeing your consistency, evolving skills, learning patterns, and progression over time.
+---
+
+## What's New in Learning Arc v2
+
+- **Persistent Application-Level Pomodoro Engine**: Timer state lives in `PomodoroContext` and persists to `localStorage` (`learning-arc-pomodoro-v1`). Active focus sessions survive internal tab navigation, tab backgrounding, browser throttling, and page refreshes.
+- **Skip Break Capability**: Skip 5-minute short breaks or 15-minute long breaks instantly. Focus sessions cannot be skipped.
+- **Intuitive Calendar Day Streaks**: Streaks are calculated using local calendar days (`YYYY-MM-DD`). Streaks remain active today if yesterday had completed study sessions. Distinguishes **Current Streak** and **Longest Streak**.
+- **Gemini 3.1 Flash Lite Migration**: Default AI model updated to `gemini-3.1-flash-lite` with environment variable configuration (`GEMINI_MODEL`).
+- **Shareable Read-Only Public Profiles (`/p/[id]`)**: Users can explicitly publish sanitized snapshots of their learning journey. Visitors view a read-only profile without requiring an account.
+- **Lightweight Ownership Security**: Management tokens stored on the user's device allow updating or unpublishing profiles without requiring complex authentication platforms.
+- **Neon PostgreSQL Production Adapter**: Serverless Neon PostgreSQL database integration (`@neondatabase/serverless`) for production public profile persistence, with safe local filesystem fallback for offline development.
+- **Kinetic Precision Design System**: Built with modern typography (`Hanken Grotesk` & `JetBrains Mono`), tabular timer typography, subtle micro-interactions, and mobile responsiveness down to 360px.
+
+---
 
 ## Architecture
 
-Learning Arc is built with **Next.js App Router and TypeScript**.
+Next.js App Router + TypeScript + browser `localStorage` + Serverless Neon PostgreSQL / Local Fallback.
 
-The learning journey is stored locally in the browser using `localStorage`, so no account is required.
+```
+app/
+├── api/
+│   ├── analyze/route.ts     # Gemini 3.1 Flash Lite boundary (rate-limited, Zod-validated)
+│   └── publish/route.ts     # Public snapshot publish, update, and unpublish API
+├── p/
+│   └── [id]/page.tsx        # Read-only public shareable learning journey profile
+├── globals.css              # Design tokens, Light & Dark theme systems
+├── layout.tsx               # Root layout
+└── page.tsx                 # App root wrapped in PomodoroProvider
 
-`app/api/analyze/route.ts` is the only Gemini boundary. `GEMINI_API_KEY` remains server-side. The API validates input and structured model output with Zod, normalizes model responses to safe limits, applies basic in-memory rate limiting, and instructs the model to treat user reflections as untrusted data.
-
-AI is intentionally user-triggered rather than constantly running in the background.
-
-## Run locally
-
-Install dependencies:
-
-```bash
-npm install
+lib/
+├── data.ts                  # Store schema, stats calculations, 30-day demo seed
+├── pomodoro.ts              # Timestamp timing math & Pomodoro state machine
+├── streak.ts                # Local calendar day streak semantics & longest streak logic
+└── db.ts                    # Serverless Neon Postgres database adapter with local fallback
 ```
 
-Copy the environment example:
+---
 
-```bash
-copy .env.example .env.local
-```
+## Local Development Setup
 
-Add your Gemini API key to `.env.local`:
+1. **Clone & Install Dependencies**:
+   ```bash
+   git clone https://github.com/manu4712/Learning-arc.git
+   cd Learning-arc
+   npm install
+   ```
 
-```text
-GEMINI_API_KEY=your_key_here
-```
+2. **Configure Environment Variables**:
+   ```bash
+   copy .env.example .env.local
+   ```
+   Add your Gemini API key to `.env.local`:
+   ```env
+   GEMINI_API_KEY=your_gemini_api_key_here
+   GEMINI_MODEL=gemini-3.1-flash-lite
+   DATABASE_URL=  # Optional for local dev; local filesystem fallback is included
+   ```
 
-Then run:
+3. **Run Dev Server**:
+   ```bash
+   npm run dev
+   ```
+   Open `http://localhost:3000` in your browser.
 
-```bash
-npm run dev
-```
+4. **Verify TypeScript & Production Build**:
+   ```bash
+   npm run typecheck
+   npm run build
+   ```
 
-The Gemini API key is optional for the core local experience. Without it, AI-powered interpretation will be unavailable, but focus tracking, saved evidence, the learning journey, and deterministic analytics continue to work.
+---
 
-Never commit `.env.local`.
+## Production Deployment Setup (Neon PostgreSQL + Vercel)
 
-## Demo
+Production public profiles require durable PostgreSQL database storage. We use **Neon Free Tier PostgreSQL**.
 
-For the fastest product walkthrough:
+### Step-by-Step Setup:
 
-1. Open **Settings & Data**.
-2. Select **Load demo journey** and confirm.
-3. Explore the **30-day English-learning journey**.
-4. Open **Journey** to see contribution history, daily evidence, and Skill Evolution.
-5. Open **Learning Intelligence** to see evidence-based interpretation.
-6. Open **Proof** to see the accumulated Proof of Learning.
+1. **Create a Free Neon PostgreSQL Project**:
+   - Sign up / log in to [Neon.tech](https://neon.tech).
+   - Create a new PostgreSQL project (e.g. `learning-arc-db`).
+   - Copy the PostgreSQL connection string (`DATABASE_URL`).
+     Example: `postgres://user:password@ep-sample-123.us-east-2.aws.neon.tech/neondb?sslmode=require`
 
-The demo journey is generated locally and does not require API quota to load.
+2. **Configure Vercel Environment Variables**:
+   - Push your repository to GitHub and import the project in Vercel.
+   - In Vercel Project Settings → **Environment Variables**, add:
+     - `DATABASE_URL` = `<Neon PostgreSQL connection string>`
+     - `GEMINI_API_KEY` = `<Your Google Gemini API key>`
+     - `GEMINI_MODEL` = `gemini-3.1-flash-lite`
+   - Apply variables to **Production**, **Preview**, and **Development**.
 
-## Privacy & Limitations
+3. **Automatic Table Initialization**:
+   - The database adapter automatically initializes the required table on first publish:
+     ```sql
+     CREATE TABLE IF NOT EXISTS public_profiles (
+       id TEXT PRIMARY KEY,
+       management_token TEXT NOT NULL,
+       published_at TEXT NOT NULL,
+       updated_at TEXT NOT NULL,
+       data JSONB NOT NULL
+     );
+     ```
 
-Learning data is stored in the current browser until the user exports it.
+4. **Deploy & Verify Production Public Sharing**:
+   - Deploy to Vercel.
+   - Open your deployed application URL.
+   - Click **Publish Learning Journey**.
+   - Copy the public URL (`/p/<public-id>`) and open it in an **Incognito / Private browser tab**.
+   - Verify the profile loads without login or authentication.
+   - Verify **Update Snapshot** and **Unpublish** controls work cleanly using the owner management token.
 
-AI requests are made only when the user explicitly requests analysis and contain the learning evidence required for that interpretation.
+---
 
-This hackathon MVP currently has:
+## Privacy & Local-First Philosophy
 
-- No account system
-- No cross-device synchronization
-- No public social profiles or community layer
-- No permanent cloud storage for learning records
-
-Users can export their journey as JSON for backup and import it later.
-
-## Why Learning Arc?
-
-The core idea is not another Pomodoro timer or generic AI chatbot.
-
-Learning Arc treats **learning itself as something that can accumulate visible evidence**.
-
-Individual focus sessions become reflections. Reflections become structured evidence. Evidence reveals skills and patterns. Over time, those signals become a visible learning journey and a personal Proof of Learning.
-
-**Learning Arc turns the time you spend learning into visible evidence of how far you've actually grown.**
+- **Local First**: Private working data lives inside the browser's `localStorage` (`learning-arc-v1`).
+- **Explicit Publishing**: Data is **never** uploaded automatically. Public snapshot generation occurs only when the user explicitly clicks **Publish Learning Journey**.
+- **Sanitized Snapshots**: Public snapshots include only non-sensitive evidence (topic, reflection, duration, skills, AI summaries). Private keys, environment variables, and local management tokens are never exposed.

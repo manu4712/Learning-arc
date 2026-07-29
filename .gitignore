@@ -1,7 +1,9 @@
 node_modules
+stitch-reference
 .next
-.env.local
+.env*
+!.env.example
 .vercel
 *.log
 *.tsbuildinfo
-DEMO_SCRIPT.md
+outputs/
