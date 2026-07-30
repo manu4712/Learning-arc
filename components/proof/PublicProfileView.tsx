@@ -1,48 +1,22 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import ThemeToggle from "@/components/layout/ThemeToggle";
 import { PublicProfileSnapshot } from "@/lib/db";
-import { minutes, localDay } from "@/lib/data";
+import { minutes, getAvailableYears, Session } from "@/lib/data";
+import YearlyContributionCalendar from "@/components/journey/YearlyContributionCalendar";
 
 export type PublicProfileViewData = Omit<PublicProfileSnapshot, "managementToken">;
 
 export default function PublicProfileView({ profile }: { profile: PublicProfileViewData }) {
+  const sessions = (profile.sessions || []) as Session[];
+  const availableYears = getAvailableYears(sessions);
+
+  const [selectedYear, setSelectedYear] = useState<number>(
+    availableYears[0] || new Date().getFullYear()
+  );
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [showAllSkillsOpen, setShowAllSkillsOpen] = useState(false);
-  const selectedDayRef = useRef<HTMLDivElement | null>(null);
-
-  // 84-day contribution grid array
-  const end = new Date(profile.updatedAt || Date.now());
-  const start = new Date(end);
-  start.setDate(start.getDate() - 83);
-
-  const days = Array.from({ length: 84 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    return localDay(d.toISOString());
-  });
-
-  // Calculate daily totals for grid
-  const dailyTotals: Record<string, number> = {};
-  profile.sessions.forEach((s) => {
-    const day = localDay(s.completedAt);
-    dailyTotals[day] = (dailyTotals[day] || 0) + s.duration;
-  });
-
-  const selectedDaySessions = selectedDay
-    ? profile.sessions.filter((s) => localDay(s.completedAt) === selectedDay)
-    : [];
-
-  const handleSelectDay = (day: string) => {
-    setSelectedDay(day);
-    // On mobile, gently scroll selected-day evidence into view
-    if (typeof window !== "undefined" && window.innerWidth <= 768) {
-      setTimeout(() => {
-        selectedDayRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }, 50);
-    }
-  };
 
   // Ranked skills sorting: sessionCount desc, stage weight (APPLIED > PRACTICED > LEARNED)
   const stageWeights: Record<string, number> = {
@@ -126,106 +100,17 @@ export default function PublicProfileView({ profile }: { profile: PublicProfileV
         </div>
       </section>
 
-      {/* 4. LEARNING EFFORT GRID (84-Day Activity History) */}
+      {/* 4 & 5. YEAR-BASED LEARNING CALENDAR & SELECTED DAY EVIDENCE */}
       <section className="panel public-section-block">
-        <div className="panel-header">
-          <span className="eyebrow">LEARNING EFFORT GRID</span>
-          <h2>84-Day Activity History</h2>
-        </div>
-
-        <div className="calendar-grid">
-          {days.map((day) => {
-            const mins = dailyTotals[day] || 0;
-            const level =
-              mins === 0 ? 0 : mins <= 45 ? 1 : mins <= 90 ? 2 : mins <= 150 ? 3 : 4;
-            const isSelected = selectedDay === day;
-
-            return (
-              <button
-                key={day}
-                type="button"
-                className={`calendar-day level-${level} ${isSelected ? "selected" : ""}`}
-                onClick={() => handleSelectDay(day)}
-                title={`${day}: ${mins} minutes focused`}
-                aria-label={`${day}: ${mins} minutes`}
-              />
-            );
-          })}
-        </div>
-
-        <div className="calendar-legend">
-          <span>Less effort</span>
-          <i className="level-0" />
-          <i className="level-1" />
-          <i className="level-2" />
-          <i className="level-3" />
-          <i className="level-4" />
-          <span>More focus</span>
-        </div>
-      </section>
-
-      {/* 5. SELECTED DAY LEARNING EVIDENCE (IMMEDIATELY BELOW GRID) */}
-      <section className="panel public-section-block" ref={selectedDayRef}>
-        <div className="panel-header">
-          <span className="eyebrow tag-reflected">REFLECTED EVIDENCE</span>
-          <h2>
-            {selectedDay
-              ? new Date(`${selectedDay}T12:00:00`).toLocaleDateString(undefined, {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })
-              : "Click any active day in the activity history grid above"}
-          </h2>
-        </div>
-
-        {selectedDay ? (
-          selectedDaySessions.length ? (
-            <div className="day-sessions-list">
-              {selectedDaySessions.map((s) => (
-                <article className="public-session-card" key={s.id}>
-                  <div className="session-header">
-                    <div className="session-topic">{s.topic}</div>
-                    <div className="session-badges">
-                      <span className={`mode-pill ${s.mode.toLowerCase()}`}>{s.mode}</span>
-                      <span className="duration-pill">{minutes(s.duration)}</span>
-                    </div>
-                  </div>
-
-                  <div className="session-reflection">
-                    <span className="section-label">Learner Reflection</span>
-                    <p>“{s.reflection}”</p>
-                  </div>
-
-                  <div className="session-meta">
-                    <span>Independence: <strong>{s.independence}</strong></span>
-                    {s.difficulty && (
-                      <span>Challenge: <em>{s.difficulty}</em></span>
-                    )}
-                  </div>
-
-                  {s.analysis && (
-                    <div className="session-ai-analysis">
-                      <span className="section-label tag-interpreted">AI Analysis Summary</span>
-                      <p>{s.analysis.summary}</p>
-                      <div className="progression-text">
-                        <strong>Progression Signal:</strong> {s.analysis.progression}
-                      </div>
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-day-state">
-              <p>No completed focus sessions recorded for this date.</p>
-            </div>
-          )
-        ) : (
-          <div className="empty-day-state">
-            <p>Select an active square from the contribution grid above to inspect session reflections and evidence.</p>
-          </div>
-        )}
+        <YearlyContributionCalendar
+          sessions={sessions}
+          selectedYear={selectedYear}
+          availableYears={availableYears}
+          onSelectYear={setSelectedYear}
+          selectedDay={selectedDay}
+          onSelectDay={setSelectedDay}
+          title="LEARNING EFFORT GRID"
+        />
       </section>
 
       {/* 6. SKILL EVOLUTION (Top 8 Evidence-Backed Skills) */}

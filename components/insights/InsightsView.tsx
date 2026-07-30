@@ -99,13 +99,13 @@ export default function InsightsView({ store, st, onUpdateStore }: InsightsViewP
         <section className="panel intelligence-panel empty-intel">
           <div className="empty-intel-content">
             <span className="empty-icon">✦</span>
-            <h2>Your first learning review is ready when you are</h2>
+            <h2>{st.done.length ? "Your first learning review is ready" : "No learning evidence yet."}</h2>
             <p>
               {st.done.length
                 ? `You have ${st.done.length} completed session${
                     st.done.length === 1 ? "" : "s"
                   }. Learning Intelligence interprets your balance, topics, and independence signals.`
-                : "Complete one focus session to create your first learning review."}
+                : "Complete your first focus session to generate your first AI learning review."}
             </p>
             <button
               className="primary"

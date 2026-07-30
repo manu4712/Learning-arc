@@ -1,19 +1,242 @@
-export const MODES = ["Learning", "Practicing", "Building", "Reading", "Revising", "Other"] as const;
-export type Mode = typeof MODES[number];
-export type Independence = "Following a tutorial" | "With significant guidance" | "With some guidance" | "Mostly independently" | "Completely independently";
-export type Goal = { title: string; description?: string; duration: string; createdAt: string };
-export type Analysis = { summary: string; skills: string[]; classification: "guided" | "practice" | "application" | "exploration"; evidence: "low" | "medium" | "high"; progression: string; concern?: string; nextAction: string };
-export type Session = { id: string; startedAt: string; completedAt: string; duration: number; mode: Mode; customActivity?: string; topic: string; intent?: string; reflection: string; independence: Independence; difficulty?: string; analysis?: Analysis; analysisError?: boolean };
-export type Report = { createdAt: string; narrative: string; priority: string; pattern: string; gap: string };
-export type Store = { version: 1; goal?: Goal; sessions: Session[]; report?: Report };
-export const EMPTY: Store = { version: 1, sessions: [] };
-const key = "learning-arc-v1";
-export function load(): Store { try { const p = JSON.parse(localStorage.getItem(key) || "null"); return p && p.version === 1 && Array.isArray(p.sessions) ? p : EMPTY; } catch { return EMPTY; } }
-export function save(data: Store) { localStorage.setItem(key, JSON.stringify(data)); }
-export function localDay(iso: string) { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
-export function minutes(n: number) { const h = Math.floor(n / 60); return h ? `${h}h ${n % 60}m` : `${n}m`; }
 import { calculateStreak } from "./streak";
 
-export function stats(sessions: Session[]) { const done=sessions.filter(s=>s.completedAt),total=done.reduce((n,s)=>n+s.duration,0),today=localDay(new Date().toISOString()),daily=Object.fromEntries(done.map(s=>[localDay(s.completedAt),0] as [string,number]));done.forEach(s=>daily[localDay(s.completedAt)]+=s.duration);const { currentStreak, longestStreak, isStreakActiveToday } = calculateStreak(sessions);const byMode=Object.fromEntries(MODES.map(m=>[m,done.filter(s=>s.mode===m).reduce((n,s)=>n+s.duration,0)]));const top=Object.entries(done.reduce<Record<string,number>>((a,s)=>{a[s.topic]=(a[s.topic]||0)+s.duration;return a},{})).sort((a,b)=>b[1]-a[1]).slice(0,5);return {done,total,today:daily[today]||0,week:done.filter(s=>Date.now()-new Date(s.completedAt).getTime()<6048e5).reduce((n,s)=>n+s.duration,0),streak:currentStreak,currentStreak,longestStreak,isStreakActiveToday,daily,byMode,top}; }
-export function validateImport(value: unknown): value is Store { return !!value && typeof value === "object" && (value as Store).version === 1 && Array.isArray((value as Store).sessions); }
-export function seed(): Store { const now=new Date(),topics=["Basic grammar patterns","Everyday vocabulary","Pronunciation sounds","Guided listening","Present-tense practice","Useful phrases","Reading aloud","Sentence formation","Shadowing a dialogue","Listening for key ideas","Question forms","Short speaking exercise","Reading a news paragraph","Describing a routine","Conversation prompts","Summarizing a video","Talking about yesterday","Role-play practice","Explaining a preference","Listening without subtitles","Describing an experience","Opinion practice","Independent speaking","Telling a short story","Mock interview answers","Longer conversation practice","Explaining an idea","Storytelling from prompts","Speaking with confidence","Weekly speaking reflection"],durations=[42,48,38,45,52,41,50,55,47,58,49,54,46,60,52,62,57,64,55,68,61,70,66,72,58,75,69,78,74,80],skills=["Grammar","Vocabulary","Pronunciation","Listening","Grammar","Vocabulary","Pronunciation","Sentence formation","Pronunciation","Listening","Grammar","Speaking","Reading","Speaking","Conversation","Listening","Speaking","Conversation","Speaking","Listening","Speaking","Speaking","Speaking","Storytelling","Interview speaking","Conversation","Speaking","Storytelling","Speaking","Speaking"],sessions=topics.map((topic,i)=>{const end=new Date(now);end.setDate(now.getDate()-(29-i));end.setHours(7+i%4,15,0,0);const late=i>=21,middle=i>=14,mode:Mode=late?"Building":middle?"Practicing":i%5===3?"Reading":"Learning",independence:Independence=late?"Mostly independently":middle?"With some guidance":"Following a tutorial";return {id:`english-demo-${i+1}`,startedAt:new Date(end.getTime()-durations[i]*60000).toISOString(),completedAt:end.toISOString(),duration:durations[i],mode,topic,intent:i<7?"Build a calm daily English foundation.":i<14?"Speak more naturally in complete sentences.":i<21?"Use English without relying on notes.":"Express ideas with more confidence.",reflection:i<7?`Practised ${topic.toLowerCase()} with guided examples and repeated useful parts aloud.`:i<14?`Used ${topic.toLowerCase()} in short exercises, then repeated the parts that felt less natural.`:i<21?`Completed ${topic.toLowerCase()} with fewer notes and noticed more fluent responses.`:`Worked independently on ${topic.toLowerCase()} and recorded a clearer, longer response than before.`,independence,difficulty:i<10?"Remembering new words while speaking.":i<20?"Keeping sentences flowing without pausing.":"Choosing precise words while staying relaxed.",analysis:{summary:i<7?`Built a guided foundation in ${topic.toLowerCase()}.`:i<14?`Practised ${topic.toLowerCase()} with growing comfort.`:i<21?`Used ${topic.toLowerCase()} with increasing independence.`:`Applied ${topic.toLowerCase()} in a self-directed speaking task.`,skills:[skills[i],...(i%5===0?["Speaking"]:[])],classification:late?"application":middle?"practice":"guided",evidence:late?"high":middle?"medium":"low",progression:late?"Independent speaking is becoming more sustained and specific.":middle?"Practice is connecting listening and speaking into fuller responses.":"A steady foundation for more independent speaking.",concern:i<14?"Follow guided work with one short response from memory.":undefined,nextAction:late?"Record one more answer and improve a single phrase.":"Reuse today’s language in a short spoken response."}} as Session});return {version:1,goal:{title:"Speak English Confidently",description:"Build confidence to understand, speak, and express ideas clearly in everyday English.",duration:"90 days",createdAt:new Date(now.getTime()-29*86400000).toISOString()},sessions,report:{createdAt:now.toISOString(),narrative:"Thirty consecutive days show a credible shift from guided foundations toward increasingly independent speaking. This is meaningful Day 30 progress in a 90-day goal, not a claim of mastery.",pattern:"Early grammar, vocabulary, and listening work now supports repeated speaking and storytelling practice.",gap:"Keep stretching longer spontaneous answers, especially when explaining unfamiliar ideas.",priority:"Have one five-minute conversation this week, then note one phrase to use more naturally."}}; }
+export const MODES = ["Learning", "Practicing", "Building", "Reading", "Revising", "Other"] as const;
+export type Mode = typeof MODES[number];
+
+export type Independence =
+  | "Following a tutorial"
+  | "With significant guidance"
+  | "With some guidance"
+  | "Mostly independently"
+  | "Completely independently";
+
+export type Goal = {
+  title: string;
+  description?: string;
+  duration: string;
+  createdAt: string;
+};
+
+export type Analysis = {
+  summary: string;
+  skills: string[];
+  classification: "guided" | "practice" | "application" | "exploration";
+  evidence: "low" | "medium" | "high";
+  progression: string;
+  concern?: string;
+  nextAction: string;
+};
+
+export type Session = {
+  id: string;
+  startedAt: string;
+  completedAt: string;
+  duration: number;
+  mode: Mode;
+  customActivity?: string;
+  topic: string;
+  intent?: string;
+  reflection: string;
+  independence: Independence;
+  difficulty?: string;
+  analysis?: Analysis;
+  analysisError?: boolean;
+};
+
+export type Report = {
+  createdAt: string;
+  narrative: string;
+  priority: string;
+  pattern: string;
+  gap: string;
+};
+
+export type Store = {
+  version: 1;
+  goal?: Goal;
+  sessions: Session[];
+  report?: Report;
+};
+
+export const EMPTY: Store = { version: 1, sessions: [] };
+
+const key = "learning-arc-v1";
+
+export function load(): Store {
+  try {
+    const p = JSON.parse(localStorage.getItem(key) || "null");
+    return p && p.version === 1 && Array.isArray(p.sessions) ? p : EMPTY;
+  } catch {
+    return EMPTY;
+  }
+}
+
+export function save(data: Store) {
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+export function localDay(iso: string) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function minutes(n: number) {
+  const h = Math.floor(n / 60);
+  return h ? `${h}h ${n % 60}m` : `${n}m`;
+}
+
+export function stats(sessions: Session[]) {
+  const done = sessions.filter((s) => s.completedAt);
+  const total = done.reduce((n, s) => n + s.duration, 0);
+  const today = localDay(new Date().toISOString());
+  const daily: Record<string, number> = {};
+  
+  done.forEach((s) => {
+    const day = localDay(s.completedAt);
+    if (day) daily[day] = (daily[day] || 0) + s.duration;
+  });
+
+  const { currentStreak, longestStreak, isStreakActiveToday } = calculateStreak(sessions);
+
+  const byMode = Object.fromEntries(
+    MODES.map((m) => [m, done.filter((s) => s.mode === m).reduce((n, s) => n + s.duration, 0)])
+  );
+
+  const top = Object.entries(
+    done.reduce<Record<string, number>>((a, s) => {
+      a[s.topic] = (a[s.topic] || 0) + s.duration;
+      return a;
+    }, {})
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  return {
+    done,
+    total,
+    today: daily[today] || 0,
+    week: done
+      .filter((s) => Date.now() - new Date(s.completedAt).getTime() < 6048e5)
+      .reduce((n, s) => n + s.duration, 0),
+    streak: currentStreak,
+    currentStreak,
+    longestStreak,
+    isStreakActiveToday,
+    daily,
+    byMode,
+    top,
+  };
+}
+
+export function validateImport(value: unknown): value is Store {
+  return !!value && typeof value === "object" && (value as Store).version === 1 && Array.isArray((value as Store).sessions);
+}
+
+export type CalendarDayInfo = {
+  dateStr: string; // "YYYY-MM-DD"
+  dateObj: Date;
+  monthIndex: number; // 0..11
+  dayOfWeek: number; // 0 (Sun) .. 6 (Sat)
+  dayOfMonth: number;
+};
+
+/**
+ * Returns all calendar day objects for a given full calendar year (Jan 1 to Dec 31).
+ * Handles leap years automatically (366 days for leap years, 365 days otherwise).
+ */
+export function getYearCalendarDays(year: number): CalendarDayInfo[] {
+  const days: CalendarDayInfo[] = [];
+  const start = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31);
+  const current = new Date(start);
+
+  while (current <= end) {
+    const y = current.getFullYear();
+    const m = String(current.getMonth() + 1).padStart(2, "0");
+    const d = String(current.getDate()).padStart(2, "0");
+    days.push({
+      dateStr: `${y}-${m}-${d}`,
+      dateObj: new Date(current),
+      monthIndex: current.getMonth(),
+      dayOfWeek: current.getDay(),
+      dayOfMonth: current.getDate(),
+    });
+    current.setDate(current.getDate() + 1);
+  }
+  return days;
+}
+
+/**
+ * Dynamically computes all available years:
+ * = all years containing recorded Learning Arc sessions + current local calendar year.
+ * Sorted descending (e.g. [2026] or [2027, 2026]).
+ */
+export function getAvailableYears(sessions: Session[]): number[] {
+  const currentYear = new Date().getFullYear();
+  const sessionYears = sessions
+    .map((s) => {
+      if (!s.completedAt) return null;
+      const d = new Date(s.completedAt);
+      return isNaN(d.getTime()) ? null : d.getFullYear();
+    })
+    .filter((y): y is number => y !== null);
+
+  const yearsSet = new Set([...sessionYears, currentYear]);
+  return Array.from(yearsSet).sort((a, b) => b - a);
+}
+
+/**
+ * Calculates factual stats for a specific selected calendar year.
+ */
+export function getYearStats(sessions: Session[], year: number) {
+  const yearSessions = sessions.filter((s) => {
+    if (!s.completedAt) return false;
+    const d = new Date(s.completedAt);
+    return !isNaN(d.getTime()) && d.getFullYear() === year;
+  });
+
+  const totalMinutes = yearSessions.reduce((acc, s) => acc + s.duration, 0);
+
+  const dailyTotals: Record<string, number> = {};
+  yearSessions.forEach((s) => {
+    const day = localDay(s.completedAt);
+    if (day) dailyTotals[day] = (dailyTotals[day] || 0) + s.duration;
+  });
+
+  const activeDaysCount = Object.keys(dailyTotals).length;
+
+  // Calculate longest streak specifically within this year
+  const sortedActiveDays = Object.keys(dailyTotals).sort();
+  let maxStreakInYear = 0;
+  let currentRun = 0;
+  let prevDate: Date | null = null;
+
+  sortedActiveDays.forEach((dayStr) => {
+    const curDate = new Date(`${dayStr}T00:00:00`);
+    if (prevDate) {
+      const diffMs = curDate.getTime() - prevDate.getTime();
+      const diffDays = Math.round(diffMs / 86400000);
+      if (diffDays === 1) {
+        currentRun += 1;
+      } else {
+        currentRun = 1;
+      }
+    } else {
+      currentRun = 1;
+    }
+    if (currentRun > maxStreakInYear) {
+      maxStreakInYear = currentRun;
+    }
+    prevDate = curDate;
+  });
+
+  return {
+    yearSessions,
+    totalMinutes,
+    activeDaysCount,
+    totalSessionsCount: yearSessions.length,
+    maxStreakInYear,
+    dailyTotals,
+  };
+}
