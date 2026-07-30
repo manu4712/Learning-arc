@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { usePomodoro } from "@/components/context/PomodoroContext";
 import { Goal, Session, stats as calculateStats, minutes } from "@/lib/data";
 
-type Screen = "today" | "focus" | "journey" | "insights" | "proof" | "settings";
+type Screen = "today" | "plan" | "focus" | "journey" | "insights" | "proof" | "settings";
 
 type TodayViewProps = {
   goal: Goal;
@@ -53,12 +53,20 @@ export default function TodayView({
           <h1 className="hero-title">{goal.title}</h1>
           <p className="hero-desc">{goal.description || "Turn focused effort into independent capability."}</p>
         </div>
-        <button
-          className="primary hero-cta-btn"
-          onClick={() => onNavigate("focus")}
-        >
-          {isTimerRunning ? "Return to Active Focus →" : "Start a Focus Session →"}
-        </button>
+        <div className="hero-action-buttons">
+          <button
+            className="secondary hero-cta-btn"
+            onClick={() => onNavigate("plan")}
+          >
+            Open Plan →
+          </button>
+          <button
+            className="primary hero-cta-btn"
+            onClick={() => onNavigate("focus")}
+          >
+            {isTimerRunning ? "Return to Active Focus →" : "Start a Focus Session →"}
+          </button>
+        </div>
       </div>
 
       {/* Stat Row */}

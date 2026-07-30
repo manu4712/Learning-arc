@@ -3,14 +3,22 @@
 import React, { useRef, useEffect } from "react";
 import {
   Session,
+  Store,
   getYearCalendarDays,
   getYearStats,
   localDay,
   minutes,
   CalendarDayInfo,
 } from "@/lib/data";
+import {
+  getHistoricalTasksForDay,
+  getPlanForDay,
+  getTaskFocusedMinutes,
+  getTaskSessionCount,
+} from "@/lib/planning";
 
 type YearlyContributionCalendarProps = {
+  store?: Store;
   sessions: Session[];
   selectedYear: number;
   availableYears: number[];
@@ -36,6 +44,7 @@ const MONTH_NAMES = [
 ];
 
 export default function YearlyContributionCalendar({
+  store,
   sessions,
   selectedYear,
   availableYears,
@@ -49,6 +58,9 @@ export default function YearlyContributionCalendar({
 
   const stats = getYearStats(sessions, selectedYear);
   const daysInYear = getYearCalendarDays(selectedYear);
+
+  const historicalTasks = selectedDay ? getHistoricalTasksForDay(store?.tasks, selectedDay) : [];
+  const planForDay = selectedDay ? getPlanForDay(store?.dailyPlans, selectedDay) : null;
 
   // Group days by exact calendar months (Jan = 0 .. Dec = 11)
   const monthBlocks = MONTH_NAMES.map((monthName, mIdx) => {
@@ -239,10 +251,10 @@ export default function YearlyContributionCalendar({
         <span>More focus</span>
       </div>
 
-      {/* Selected Day Evidence (IMMEDIATELY BELOW GRID) */}
+      {/* Selected Day Evidence & Execution */}
       <div className="selected-day-evidence-section" ref={selectedDayEvidenceRef}>
         <div className="panel-header">
-          <span className="eyebrow tag-reflected">SELECTED DAY EVIDENCE</span>
+          <span className="eyebrow tag-reflected">HISTORICAL JOURNEY DAY</span>
           <h3>
             {selectedDay
               ? new Date(`${selectedDay}T12:00:00`).toLocaleDateString(undefined, {
@@ -256,55 +268,128 @@ export default function YearlyContributionCalendar({
         </div>
 
         {selectedDay ? (
-          selectedDaySessions.length ? (
-            <div className="day-sessions-list">
-              {selectedDaySessions.map((s) => (
-                <article className="public-session-card" key={s.id}>
-                  <div className="session-header">
-                    <div className="session-topic">{s.topic}</div>
-                    <div className="session-badges">
-                      <span className={`mode-pill ${s.mode.toLowerCase()}`}>{s.mode}</span>
-                      <span className="duration-pill">{minutes(s.duration)}</span>
-                    </div>
+          <div className="day-selected-wrapper">
+            {/* 1. DAILY EXECUTION (Planning History) */}
+            <div className="daily-execution-panel">
+              <span className="eyebrow tag-reflected">DAILY EXECUTION</span>
+              {planForDay?.intention ? (
+                <div className="historical-intention-box">
+                  <span className="section-label">INTENTION</span>
+                  <p className="historical-intention-text">“{planForDay.intention}”</p>
+                </div>
+              ) : null}
+
+              {historicalTasks.length > 0 ? (
+                <div className="historical-tasks-container">
+                  <span className="section-label">COMMITMENTS & EXECUTION ({historicalTasks.length})</span>
+                  <div className="historical-tasks-grid">
+                    {historicalTasks.map((t) => {
+                      const focusedMins = getTaskFocusedMinutes(t, sessions);
+                      const sessionCount = getTaskSessionCount(t, sessions);
+                      const formattedMins = focusedMins > 60 ? `${Math.floor(focusedMins / 60)}h ${focusedMins % 60}m` : `${focusedMins}m`;
+
+                      let statusIcon = "○";
+                      let statusText = "Left unfinished";
+                      let statusClass = "unfinished";
+
+                      if (t.status === "completed") {
+                        statusIcon = "✓";
+                        if (t.completedManually || (focusedMins === 0 && sessionCount === 0)) {
+                          statusText = "Completed manually";
+                          statusClass = "completed-manual";
+                        } else {
+                          statusText = `${formattedMins} focused · ${sessionCount} session${sessionCount === 1 ? "" : "s"}`;
+                          statusClass = "completed-evidence";
+                        }
+                      } else if (t.carriedFromDate && t.date !== selectedDay) {
+                        statusIcon = "↗";
+                        statusText = `Carried forward to ${t.date}`;
+                        statusClass = "rolled-over";
+                      } else if (t.status === "in_progress") {
+                        statusIcon = "◔";
+                        statusText = `${formattedMins} focused · ${sessionCount} session${sessionCount === 1 ? "" : "s"} (in progress)`;
+                        statusClass = "in-progress";
+                      }
+
+                      return (
+                        <div key={t.id} className={`historical-task-card ${statusClass}`}>
+                          <span className="hist-icon">{statusIcon}</span>
+                          <div className="hist-details">
+                            <strong className="hist-title">{t.title}</strong>
+                            <span className="hist-meta">{statusText}</span>
+                            {t.originalPlannedDate && t.originalPlannedDate !== selectedDay && (
+                              <span className="hist-orig-tag">Originally planned {t.originalPlannedDate}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
+                </div>
+              ) : (
+                <p className="no-tasks-historical">No commitment records for this day.</p>
+              )}
+            </div>
 
-                  {s.reflection && (
-                    <div className="session-reflection">
-                      <span className="section-label">Learner Reflection</span>
-                      <p>“{s.reflection}”</p>
-                    </div>
-                  )}
+            {/* 2. LEARNING EVIDENCE */}
+            <div className="learning-evidence-panel" style={{ marginTop: "20px" }}>
+              <span className="eyebrow tag-interpreted">LEARNING EVIDENCE</span>
+              {selectedDaySessions.length ? (
+                <div className="day-sessions-list" style={{ marginTop: "10px" }}>
+                  {selectedDaySessions.map((s) => (
+                    <article className="public-session-card" key={s.id}>
+                      <div className="session-header">
+                        <div className="session-topic">{s.topic}</div>
+                        <div className="session-badges">
+                          <span className={`mode-pill ${s.mode.toLowerCase()}`}>{s.mode}</span>
+                          <span className="duration-pill">{minutes(s.duration)}</span>
+                        </div>
+                      </div>
 
-                  <div className="session-meta">
-                    <span>
-                      Independence: <strong>{s.independence}</strong>
-                    </span>
-                    {s.difficulty && (
-                      <span>
-                        Challenge: <em>{s.difficulty}</em>
-                      </span>
-                    )}
-                  </div>
-
-                  {s.analysis && (
-                    <div className="session-ai-analysis">
-                      <span className="section-label tag-interpreted">AI Analysis Summary</span>
-                      <p>{s.analysis.summary}</p>
-                      {s.analysis.progression && (
-                        <div className="progression-text">
-                          <strong>Progression Signal:</strong> {s.analysis.progression}
+                      {s.reflection && (
+                        <div className="session-reflection">
+                          <span className="section-label">Learner Reflection</span>
+                          <p>“{s.reflection}”</p>
                         </div>
                       )}
-                    </div>
-                  )}
-                </article>
-              ))}
+
+                      <div className="session-meta">
+                        <span>
+                          Independence: <strong>{s.independence}</strong>
+                        </span>
+                        {s.difficulty && (
+                          <span>
+                            Challenge: <em>{s.difficulty}</em>
+                          </span>
+                        )}
+                        {s.taskId && (
+                          <span className="planned-provenance-tag">
+                            Linked Task: <strong>Planned</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      {s.analysis && (
+                        <div className="session-ai-analysis">
+                          <span className="section-label tag-interpreted">AI Analysis Summary</span>
+                          <p>{s.analysis.summary}</p>
+                          {s.analysis.progression && (
+                            <div className="progression-text">
+                              <strong>Progression Signal:</strong> {s.analysis.progression}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-day-state" style={{ marginTop: "10px" }}>
+                  <p>No completed focus sessions recorded for this date.</p>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="empty-day-state">
-              <p>No completed focus sessions recorded for this date.</p>
-            </div>
-          )
+          </div>
         ) : (
           <div className="empty-day-state">
             <p>Select a date from the calendar grid above to view logged reflections and evidence.</p>

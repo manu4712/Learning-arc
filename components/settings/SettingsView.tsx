@@ -33,7 +33,8 @@ export default function SettingsView({ store, onUpdateStore, onEditGoal }: Setti
           throw new Error("Invalid schema");
         }
         if (confirm("Replace your current local journey with this imported backup?")) {
-          onUpdateStore(parsed);
+          const cleanTasks = Array.isArray(parsed.tasks) ? parsed.tasks.filter((t) => (t.status as string) !== "archived") : [];
+          onUpdateStore({ ...parsed, tasks: cleanTasks });
         }
       } catch {
         alert("This file is not a valid Learning Arc backup file.");

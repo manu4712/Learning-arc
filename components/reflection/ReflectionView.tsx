@@ -36,6 +36,7 @@ type ReflectionViewProps = {
     topic: string;
     intent: string;
     duration: number;
+    taskId?: string;
   };
   onComplete: (session: Session) => void;
   onDiscard: () => void;

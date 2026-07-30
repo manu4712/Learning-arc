@@ -1,15 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
-import { Session, stats as calculateStats, getAvailableYears } from "@/lib/data";
+import { Session, Store, stats as calculateStats, getAvailableYears } from "@/lib/data";
 import YearlyContributionCalendar from "./YearlyContributionCalendar";
 
 type JourneyViewProps = {
+  store?: Store;
   sessions: Session[];
   st: ReturnType<typeof calculateStats>;
 };
 
-export default function JourneyView({ sessions }: JourneyViewProps) {
+export default function JourneyView({ store, sessions }: JourneyViewProps) {
   const availableYears = getAvailableYears(sessions);
   const [selectedYear, setSelectedYear] = useState<number>(availableYears[0] || new Date().getFullYear());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export default function JourneyView({ sessions }: JourneyViewProps) {
       {/* Year-Based Contribution Calendar & Selected Day Evidence */}
       <section className="panel journey-grid-panel">
         <YearlyContributionCalendar
+          store={store}
           sessions={sessions}
           selectedYear={selectedYear}
           availableYears={availableYears}

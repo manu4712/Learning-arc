@@ -49,6 +49,7 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
+  --radius-xl: 20px;
   --radius-full: 9999px;
   
   /* Transitions */
@@ -182,13 +183,46 @@ h2 {
   align-items: center;
   gap: 16px;
   padding: 0 max(16px, calc((100vw - 1160px) / 2));
-  border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--paper) 94%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line-subtle);
+  background: var(--paper); /* Fully solid opaque background - page content never bleeds through */
   position: sticky;
   top: 0;
   z-index: 100;
+  width: 100%;
+  margin: 0 auto;
+  border-radius: 0;
+  box-shadow: none;
+  transition: 
+    top 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    max-width 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    margin 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    border-radius 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    height 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    padding 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* MasterJi Desktop Floating Scrolled Navbar */
+@media (min-width: 769px) {
+  .site-header.scrolled {
+    top: 12px;
+    height: 48px;
+    max-width: min(1120px, calc(100vw - 32px));
+    margin: 0 auto;
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+    box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.15), 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+    padding: 0 20px;
+    overflow: hidden;
+  }
+
+  [data-theme="dark"] .site-header.scrolled {
+    box-shadow: 0 12px 36px -8px rgba(0, 0, 0, 0.6), 0 4px 12px -2px rgba(0, 0, 0, 0.3);
+  }
 }
 
 .brand {
@@ -2270,6 +2304,748 @@ input[type=number] {
   .show-all-skills-btn {
     width: 100%;
   }
+}
+
+/* ==========================================
+   LEARNING ARC v3 — PLAN DESTINATION STYLES
+   ========================================== */
+.plan-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.daily-summary-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summary-pill {
+  background: var(--surface-subtle);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.summary-pill strong {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.summary-pill span {
+  color: var(--muted);
+}
+
+.rollover-prompt-banner {
+  border-left: 3px solid var(--accent);
+  background: var(--surface-subtle);
+}
+
+.rollover-banner-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.banner-text h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 2px 0 4px;
+}
+
+.banner-text p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.banner-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.plan-workspace-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.plan-main-column, .plan-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card-header-row, .card-header-with-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.intention-editor {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.intention-input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.intention-text {
+  font-size: 15px;
+  font-style: italic;
+  color: var(--ink);
+  margin-top: 6px;
+}
+
+.task-list-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.empty-tasks-state {
+  padding: 30px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.empty-tasks-state p {
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+.task-groups-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.tasks-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.subgroup-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.task-card-item {
+  border: 1px solid var(--line-subtle);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.task-card-item:hover {
+  border-color: var(--line);
+}
+
+.task-card-item.status-completed {
+  opacity: 0.75;
+  background: var(--surface-subtle);
+}
+
+.task-main-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.task-checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 2px solid var(--line);
+  background: transparent;
+  color: var(--ink-on-accent, #ffffff);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: all 0.15s ease;
+}
+
+.task-checkbox.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.task-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.task-title {
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.task-title.line-through {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.priority-badge {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+}
+
+.priority-high { background: #fee2e2; color: #991b1b; }
+.priority-medium { background: #fef3c7; color: #92400e; }
+[data-theme="dark"] .priority-high { background: #7f1d1d; color: #fee2e2; }
+[data-theme="dark"] .priority-medium { background: #78350f; color: #fef3c7; }
+
+.task-meta-line {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.evidence-metrics-tag {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--accent);
+}
+
+.task-actions-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.focus-launch-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.task-secondary-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.icon-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease;
+}
+
+.icon-action-btn:hover { color: var(--ink); }
+.icon-action-btn.danger:hover { color: var(--danger, #ef4444); }
+
+.completed-badge {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Water Hydration Tracker */
+.water-glasses-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.water-glass-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-subtle);
+  background: var(--surface-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 15px;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.water-glass-btn.filled {
+  background: var(--accent-light, #e0f2fe);
+  border-color: var(--accent);
+}
+
+/* Gratitude Card */
+.gratitude-inputs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.gratitude-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gratitude-num {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--muted);
+  width: 16px;
+}
+
+.gratitude-input {
+  flex: 1;
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.gratitude-input:focus {
+  border-color: var(--accent);
+}
+
+/* Task Outcome Modal */
+.task-outcome-modal {
+  max-width: 480px;
+}
+
+.task-outcome-summary-box {
+  background: var(--surface-subtle);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin: 14px 0;
+}
+
+.task-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.task-metrics-row {
+  font-size: 12.5px;
+  color: var(--muted);
+  display: flex;
+  gap: 8px;
+}
+
+/* Rollover Review Modal */
+.rollover-review-modal {
+  max-width: 520px;
+}
+
+.rollover-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.rollover-task-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-md);
+  gap: 12px;
+}
+
+.rollover-item-actions {
+  display: flex;
+  gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .plan-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Hero CTA Button Layout Fix */
+.hero-action-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .hero-action-buttons {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .hero-action-buttons .hero-cta-btn {
+    width: 100%;
+  }
+}
+
+/* Priority Segmented Button Selector */
+.priority-segmented-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.priority-pill-option {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-subtle);
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.priority-pill-option.selected.priority-normal {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.priority-pill-option.selected.priority-medium {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.priority-pill-option.selected.priority-high {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
+[data-theme="dark"] .priority-pill-option.selected.priority-medium {
+  background: #78350f;
+  border-color: #f59e0b;
+  color: #fef3c7;
+}
+
+[data-theme="dark"] .priority-pill-option.selected.priority-high {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fee2e2;
+}
+
+.edit-intention-btn {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+/* Journey Daily Execution Section */
+.daily-execution-panel {
+  background: var(--surface-subtle);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-top: 12px;
+}
+
+.historical-intention-box {
+  margin: 10px 0 14px;
+}
+
+.historical-intention-text {
+  font-size: 14.5px;
+  font-style: italic;
+  color: var(--ink);
+  margin-top: 2px;
+}
+
+.historical-tasks-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historical-tasks-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.historical-task-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 13.5px;
+}
+
+.hist-icon {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--muted);
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.historical-task-card.completed-evidence .hist-icon,
+.historical-task-card.completed-manual .hist-icon {
+  color: var(--accent);
+}
+
+.hist-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hist-title {
+  color: var(--ink);
+}
+
+.hist-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hist-orig-tag {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.no-tasks-historical {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* Task Editor Modal Spacing Polish */
+.task-editor-modal {
+  max-width: 440px;
+  width: 100%;
+}
+
+.task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.task-form .input-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.priority-segmented-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.priority-pill-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-subtle);
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.priority-pill-option.selected.priority-normal {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.priority-pill-option.selected.priority-medium {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.priority-pill-option.selected.priority-high {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #991b1b;
+}
+
+[data-theme="dark"] .priority-pill-option.selected.priority-medium {
+  background: #78350f;
+  border-color: #f59e0b;
+  color: #fef3c7;
+}
+
+[data-theme="dark"] .priority-pill-option.selected.priority-high {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fee2e2;
+}
+
+/* Hydration Goal Stepper Styling */
+.hydration-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.edit-goal-btn {
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line-subtle);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.edit-goal-btn:hover {
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.hydration-goal-stepper-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line-subtle);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.stepper-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.stepper-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stepper-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stepper-value {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  min-width: 72px;
+  text-align: center;
+}
+
+/* Delete Task Modal */
+.delete-task-modal {
+  max-width: 440px;
+  width: 100%;
+}
+
+.task-to-delete-preview {
+  background: var(--surface-subtle);
+  border: 1px solid var(--line-subtle);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  margin: 12px 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.danger-btn {
+  background: #dc2626 !important;
+  border-color: #b91c1c !important;
+  color: #ffffff !important;
+}
+
+.danger-btn:hover {
+  background: #b91c1c !important;
 }
 
 /* Reduced Motion Safeguard */

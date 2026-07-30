@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { usePomodoro } from "@/components/context/PomodoroContext";
 import ThemeToggle from "./ThemeToggle";
 import { Goal } from "@/lib/data";
 
-type Screen = "today" | "focus" | "journey" | "insights" | "proof" | "settings";
+type Screen = "today" | "plan" | "focus" | "journey" | "insights" | "proof" | "settings";
 
 type HeaderProps = {
   activeScreen: Screen;
@@ -23,6 +23,19 @@ export default function Header({
   setMenuOpen,
 }: HeaderProps) {
   const { state: pomodoroState, remainingMs } = usePomodoro();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const isScrolled = window.scrollY > 20;
+      setScrolled(isScrolled);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const totalSeconds = Math.ceil(remainingMs / 1000);
   const minsStr = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
@@ -34,7 +47,7 @@ export default function Header({
     pomodoroState.phase === "long";
 
   return (
-    <header className="site-header">
+    <header className={`site-header ${scrolled ? "scrolled" : ""}`}>
       <button
         className="brand"
         onClick={() => {
@@ -61,6 +74,7 @@ export default function Header({
             {pomodoroState.isPaused
               ? `Paused • ${pomodoroState.phase === "focus" ? "Focus" : "Break"}`
               : `${minsStr}:${secsStr} ${pomodoroState.phase === "focus" ? "Focus" : "Break"}`}
+            {pomodoroState.topic ? ` (${pomodoroState.topic})` : ""}
           </span>
         </button>
       )}
@@ -78,7 +92,7 @@ export default function Header({
       </button>
 
       <nav className={`main-nav ${menuOpen ? "nav-open" : ""}`}>
-        {(["today", "focus", "journey", "insights", "proof", "settings"] as Screen[]).map((scr) => (
+        {(["today", "plan", "focus", "journey", "insights", "proof", "settings"] as Screen[]).map((scr) => (
           <button
             key={scr}
             onClick={() => {

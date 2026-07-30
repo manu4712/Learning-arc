@@ -26,6 +26,7 @@ type PomodoroContextType = {
     longMins: number;
     cycles: number;
     autoStart: boolean;
+    taskId?: string;
   }) => void;
   startNextPhase: () => void;
   pause: () => void;
@@ -195,6 +196,7 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
     longMins: number;
     cycles: number;
     autoStart: boolean;
+    taskId?: string;
   }) => {
     sounded.current = false;
     const nowMs = Date.now();

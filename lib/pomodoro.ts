@@ -22,6 +22,7 @@ export type PomodoroState = {
   reflectionPending?: boolean;
   completedAt?: number | null; // Timestamp in ms when round completed
   waitingNextPhase?: "focus" | "short" | "long";
+  taskId?: string;
 };
 
 export const DEFAULT_POMODORO_STATE: PomodoroState = {
@@ -43,6 +44,7 @@ export const DEFAULT_POMODORO_STATE: PomodoroState = {
   isRoundStarted: false,
   reflectionPending: false,
   completedAt: null,
+  taskId: undefined,
 };
 
 const POMODORO_STORAGE_KEY = "learning-arc-pomodoro-v1";

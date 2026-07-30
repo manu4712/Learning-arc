@@ -3,14 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { usePomodoro } from "@/components/context/PomodoroContext";
 import ReflectionView from "@/components/reflection/ReflectionView";
-import { Goal, Session, MODES, Mode } from "@/lib/data";
+import { Goal, Session, MODES, Mode, DailyTask } from "@/lib/data";
 
 type PomodoroViewProps = {
   goal: Goal;
   onCompleteSession: (session: Session) => void;
+  targetTask?: DailyTask;
 };
 
-export default function PomodoroView({ goal, onCompleteSession }: PomodoroViewProps) {
+export default function PomodoroView({ goal, onCompleteSession, targetTask }: PomodoroViewProps) {
   const {
     state,
     remainingMs,
@@ -22,6 +23,7 @@ export default function PomodoroView({ goal, onCompleteSession }: PomodoroViewPr
     skipBreak,
     cancelRound,
     finishReflection,
+    updateSetupField,
   } = usePomodoro();
 
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
@@ -29,7 +31,7 @@ export default function PomodoroView({ goal, onCompleteSession }: PomodoroViewPr
   // Local form setup fields
   const [mode, setMode] = useState<Mode>(state.mode || "Learning");
   const [customActivity, setCustomActivity] = useState(state.customActivity || "");
-  const [topic, setTopic] = useState(state.topic || "");
+  const [topic, setTopic] = useState<string>(targetTask?.title || state.topic || "");
   const [intent, setIntent] = useState(state.intent || "");
   const [focusMins, setFocusMins] = useState(state.focusMins || 25);
   const [shortMins, setShortMins] = useState(state.shortMins || 5);
@@ -37,12 +39,26 @@ export default function PomodoroView({ goal, onCompleteSession }: PomodoroViewPr
   const [cycles, setCycles] = useState(state.cycles || 4);
   const [autoStart, setAutoStart] = useState(state.autoStart || false);
 
+  // Prefill setup if launched from a task
+  useEffect(() => {
+    if (targetTask && state.phase === "idle") {
+      if (targetTask.title) setTopic(targetTask.title);
+      if (targetTask.mode) setMode(targetTask.mode);
+      updateSetupField({ taskId: targetTask.id, topic: targetTask.title });
+    } else if (!targetTask && state.phase === "idle") {
+      // Direct navigation to Focus from navbar -> clear any stale taskId
+      if (state.taskId) {
+        updateSetupField({ taskId: undefined });
+      }
+    }
+  }, [targetTask, state.phase, state.taskId, updateSetupField]);
+
   // Sync form state if state is updated to idle
   useEffect(() => {
     if (state.phase === "idle") {
       if (state.mode) setMode(state.mode);
       if (state.customActivity !== undefined) setCustomActivity(state.customActivity);
-      if (state.topic !== undefined) setTopic(state.topic);
+      if (!targetTask && state.topic) setTopic(state.topic);
       if (state.intent !== undefined) setIntent(state.intent);
       if (state.focusMins) setFocusMins(state.focusMins);
       if (state.shortMins) setShortMins(state.shortMins);
@@ -50,7 +66,7 @@ export default function PomodoroView({ goal, onCompleteSession }: PomodoroViewPr
       if (state.cycles) setCycles(state.cycles);
       if (state.autoStart !== undefined) setAutoStart(state.autoStart);
     }
-  }, [state]);
+  }, [state, targetTask]);
 
   if (!isLoaded) {
     return (
@@ -85,6 +101,7 @@ export default function PomodoroView({ goal, onCompleteSession }: PomodoroViewPr
       longMins,
       cycles,
       autoStart,
+      taskId: state.taskId || targetTask?.id,
     });
   };
 
@@ -113,10 +130,15 @@ export default function PomodoroView({ goal, onCompleteSession }: PomodoroViewPr
           topic: state.topic || "Focus Session",
           intent: state.intent,
           duration: totalProductiveDuration,
+          taskId: state.taskId,
         }}
         onComplete={(session) => {
+          const sessionWithTask: Session = {
+            ...session,
+            taskId: state.taskId,
+          };
           finishReflection();
-          onCompleteSession(session);
+          onCompleteSession(sessionWithTask);
         }}
         onDiscard={() => {
           finishReflection();

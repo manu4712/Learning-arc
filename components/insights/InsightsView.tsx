@@ -153,6 +153,28 @@ export default function InsightsView({ store, st, onUpdateStore }: InsightsViewP
           </p>
         </div>
       </section>
+
+      {/* Deterministic Planning & Execution Section */}
+      {(store.tasks && store.tasks.length > 0) && (
+        <section className="panel planning-insights-panel" style={{ marginTop: "16px" }}>
+          <span className="eyebrow">PLANNING & EXECUTION</span>
+          <h2>Intention vs Execution Signals</h2>
+          <div className="intel-grid-horizontal">
+            <div className="intel-metric-card">
+              <strong>{store.tasks.filter((t) => t.status === "completed").length} / {store.tasks.length}</strong>
+              <span>planned tasks completed</span>
+            </div>
+            <div className="intel-metric-card">
+              <strong>{store.tasks.filter((t) => t.carriedFromDate).length}</strong>
+              <span>tasks carried forward</span>
+            </div>
+            <div className="intel-metric-card">
+              <strong>{store.tasks.filter((t) => t.status === "in_progress").length}</strong>
+              <span>tasks in progress</span>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
