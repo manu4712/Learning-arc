@@ -27,8 +27,12 @@ export default function Header({
 
   useEffect(() => {
     const handleScroll = () => {
-      const isScrolled = window.scrollY > 20;
-      setScrolled(isScrolled);
+      const current = window.scrollY;
+      setScrolled((prev) => {
+        if (!prev && current > 32) return true;
+        if (prev && current < 12) return false;
+        return prev;
+      });
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
