@@ -267,18 +267,27 @@ export function getAvailableYears(sessions: Session[]): number[] {
  * Calculates factual stats for a specific selected calendar year.
  */
 export function getYearStats(sessions: Session[], year: number) {
-  const yearSessions = sessions.filter((s) => {
+  // Deduplicate sessions by Session.id defensively
+  const uniqueMap = new Map<string, Session>();
+  if (Array.isArray(sessions)) {
+    sessions.forEach((s) => {
+      if (s && s.id) uniqueMap.set(s.id, s);
+    });
+  }
+  const uniqueSessions = Array.from(uniqueMap.values());
+
+  const yearSessions = uniqueSessions.filter((s) => {
     if (!s.completedAt) return false;
-    const d = new Date(s.completedAt);
-    return !isNaN(d.getTime()) && d.getFullYear() === year;
+    const day = localDay(s.completedAt);
+    return Boolean(day && day.startsWith(String(year)));
   });
 
-  const totalMinutes = yearSessions.reduce((acc, s) => acc + s.duration, 0);
+  const totalMinutes = yearSessions.reduce((acc, s) => acc + (s.duration || 0), 0);
 
   const dailyTotals: Record<string, number> = {};
   yearSessions.forEach((s) => {
     const day = localDay(s.completedAt);
-    if (day) dailyTotals[day] = (dailyTotals[day] || 0) + s.duration;
+    if (day) dailyTotals[day] = (dailyTotals[day] || 0) + (s.duration || 0);
   });
 
   const activeDaysCount = Object.keys(dailyTotals).length;
