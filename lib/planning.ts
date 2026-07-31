@@ -173,15 +173,31 @@ export function getTaskEvidence(
   for (const s of sessions) {
     const isPrimary = Boolean(s.taskId && s.taskId === task.id);
     const isSecondary = Boolean(Array.isArray(task.linkedSessionIds) && task.linkedSessionIds.includes(s.id));
-    const isLegacyFallback = Boolean(
-      !s.taskId &&
-      (!task.linkedSessionIds || task.linkedSessionIds.length === 0) &&
-      s.topic &&
-      task.title &&
-      s.topic.trim().toLowerCase() === task.title.trim().toLowerCase() &&
-      s.completedAt &&
-      localDay(s.completedAt) === task.date
+
+    const sTopic = s.topic ? s.topic.trim().toLowerCase() : "";
+    const tTitle = task.title ? task.title.trim().toLowerCase() : "";
+
+    const isTopicMatch = Boolean(
+      sTopic &&
+      tTitle &&
+      (sTopic === tTitle ||
+        (sTopic.length >= 10 && tTitle.length >= 10 && (sTopic.startsWith(tTitle.substring(0, 15)) || tTitle.startsWith(sTopic.substring(0, 15)))))
     );
+
+    const sDate = s.completedAt ? localDay(s.completedAt) : "";
+
+    const isDateMatch = Boolean(
+      sDate &&
+      (
+        sDate === task.date ||
+        sDate === task.originalPlannedDate ||
+        sDate === task.carriedFromDate ||
+        (Array.isArray(task.rolloverHistory) && task.rolloverHistory.includes(sDate)) ||
+        sDate <= task.date
+      )
+    );
+
+    const isLegacyFallback = isTopicMatch && isDateMatch;
 
     if (isPrimary || isSecondary || isLegacyFallback) {
       linkedMap.set(s.id, s);
