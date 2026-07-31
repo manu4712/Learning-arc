@@ -2,7 +2,7 @@
 
 import React from "react";
 import { DailyTask, Session } from "@/lib/data";
-import { getTaskFocusedMinutes, getTaskSessionCount } from "@/lib/planning";
+import { getTaskEvidence } from "@/lib/planning";
 
 type TaskItemProps = {
   task: DailyTask;
@@ -21,31 +21,39 @@ export default function TaskItem({
   onEditTask,
   onDeleteTask,
 }: TaskItemProps) {
-  const focusedMins = getTaskFocusedMinutes(task, sessions);
-  const sessionCount = getTaskSessionCount(task, sessions);
-
-  const formattedMins =
-    focusedMins > 60
-      ? `${Math.floor(focusedMins / 60)}h ${focusedMins % 60}m`
-      : `${focusedMins}m`;
+  const evidence = getTaskEvidence(task, sessions);
 
   const isCompleted = task.status === "completed";
   const isInProgress = task.status === "in_progress";
-  const isManuallyCompleted = isCompleted && (task.completedManually || (focusedMins === 0 && sessionCount === 0));
+  const isManuallyCompleted = isCompleted && (task.completedManually || (evidence.focusedMinutes === 0 && evidence.sessionCount === 0));
+
+  let statusSymbol = "○";
+  if (isCompleted) statusSymbol = "✓";
+  else if (isInProgress) statusSymbol = "◔";
 
   return (
     <div className={`task-card-item status-${task.status}`}>
       <div className="task-main-row">
-        {/* Manual Status Toggle Checkbox */}
-        <button
-          type="button"
-          className={`task-checkbox ${isCompleted ? "checked" : ""}`}
-          onClick={() => onToggleStatus(task)}
-          aria-label={isCompleted ? "Mark task in progress" : "Mark task complete"}
-          title={isCompleted ? "Mark task in progress" : "Mark task complete"}
-        >
-          {isCompleted && "✓"}
-        </button>
+        {/* Status Indicator Badge */}
+        {isCompleted ? (
+          <button
+            type="button"
+            className="task-checkbox checked"
+            onClick={() => onToggleStatus(task)}
+            aria-label="Reopen completed task"
+            title="Click to reopen task in progress"
+          >
+            ✓
+          </button>
+        ) : (
+          <span
+            className={`task-checkbox status-indicator ${isInProgress ? "in-progress" : "planned"}`}
+            title={isInProgress ? "In Progress — complete round to reflect & complete" : "Planned"}
+            aria-label={isInProgress ? "Task In Progress" : "Task Planned"}
+          >
+            {statusSymbol}
+          </span>
+        )}
 
         {/* Task Content Details */}
         <div className="task-content">
@@ -68,12 +76,12 @@ export default function TaskItem({
                 <span className="manual-completed-tag">Completed manually</span>
               ) : (
                 <span className="evidence-metrics-tag">
-                  {formattedMins} focused · {sessionCount} session{sessionCount === 1 ? "" : "s"}
+                  {evidence.formattedHours} focused · {evidence.sessionCount} session{evidence.sessionCount === 1 ? "" : "s"}
                 </span>
               )
-            ) : focusedMins > 0 ? (
+            ) : evidence.focusedMinutes > 0 || evidence.sessionCount > 0 ? (
               <span className="evidence-metrics-tag">
-                {formattedMins} focused · {sessionCount} session{sessionCount === 1 ? "" : "s"}
+                {evidence.formattedHours} focused · {evidence.sessionCount} session{evidence.sessionCount === 1 ? "" : "s"}
               </span>
             ) : null}
 

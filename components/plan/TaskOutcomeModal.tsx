@@ -2,7 +2,7 @@
 
 import React from "react";
 import { DailyTask, Session } from "@/lib/data";
-import { getTaskFocusedMinutes, getTaskSessionCount } from "@/lib/planning";
+import { getTaskEvidence } from "@/lib/planning";
 
 type TaskOutcomeModalProps = {
   task: DailyTask;
@@ -15,13 +15,7 @@ export default function TaskOutcomeModal({
   sessions,
   onOutcome,
 }: TaskOutcomeModalProps) {
-  const focusedMins = getTaskFocusedMinutes(task, sessions);
-  const sessionCount = getTaskSessionCount(task, sessions);
-
-  const formattedMins =
-    focusedMins > 60
-      ? `${Math.floor(focusedMins / 60)}h ${focusedMins % 60}m`
-      : `${focusedMins}m`;
+  const evidence = getTaskEvidence(task, sessions);
 
   return (
     <div className="modal-backdrop">
@@ -38,9 +32,9 @@ export default function TaskOutcomeModal({
             {task.mode && <span className={`mode-pill ${task.mode.toLowerCase()}`}>{task.mode}</span>}
           </div>
           <div className="task-metrics-row">
-            <span>Evidence-backed focus: <strong>{formattedMins}</strong></span>
+            <span>Evidence-backed focus: <strong>{evidence.formattedHours}</strong></span>
             <span>•</span>
-            <span>Sessions: <strong>{sessionCount}</strong></span>
+            <span>Sessions: <strong>{evidence.sessionCount}</strong></span>
           </div>
         </div>
 

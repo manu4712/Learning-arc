@@ -13,8 +13,7 @@ import {
 import {
   getHistoricalTasksForDay,
   getPlanForDay,
-  getTaskFocusedMinutes,
-  getTaskSessionCount,
+  getTaskEvidence,
 } from "@/lib/planning";
 
 type YearlyContributionCalendarProps = {
@@ -284,9 +283,7 @@ export default function YearlyContributionCalendar({
                   <span className="section-label">COMMITMENTS & EXECUTION ({historicalTasks.length})</span>
                   <div className="historical-tasks-grid">
                     {historicalTasks.map((t) => {
-                      const focusedMins = getTaskFocusedMinutes(t, sessions);
-                      const sessionCount = getTaskSessionCount(t, sessions);
-                      const formattedMins = focusedMins > 60 ? `${Math.floor(focusedMins / 60)}h ${focusedMins % 60}m` : `${focusedMins}m`;
+                      const evidence = getTaskEvidence(t, sessions, selectedDay);
 
                       let statusIcon = "○";
                       let statusText = "Left unfinished";
@@ -294,20 +291,20 @@ export default function YearlyContributionCalendar({
 
                       if (t.status === "completed") {
                         statusIcon = "✓";
-                        if (t.completedManually || (focusedMins === 0 && sessionCount === 0)) {
+                        if (t.completedManually && evidence.sessionCount === 0) {
                           statusText = "Completed manually";
                           statusClass = "completed-manual";
                         } else {
-                          statusText = `${formattedMins} focused · ${sessionCount} session${sessionCount === 1 ? "" : "s"}`;
+                          statusText = `${evidence.formattedHours} focused · ${evidence.sessionCount} session${evidence.sessionCount === 1 ? "" : "s"}`;
                           statusClass = "completed-evidence";
                         }
                       } else if (t.carriedFromDate && t.date !== selectedDay) {
                         statusIcon = "↗";
                         statusText = `Carried forward to ${t.date}`;
                         statusClass = "rolled-over";
-                      } else if (t.status === "in_progress") {
+                      } else if (t.status === "in_progress" || evidence.sessionCount > 0) {
                         statusIcon = "◔";
-                        statusText = `${formattedMins} focused · ${sessionCount} session${sessionCount === 1 ? "" : "s"} (in progress)`;
+                        statusText = `${evidence.formattedHours} focused · ${evidence.sessionCount} session${evidence.sessionCount === 1 ? "" : "s"} · In progress`;
                         statusClass = "in-progress";
                       }
 

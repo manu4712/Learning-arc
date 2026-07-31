@@ -118,20 +118,101 @@ export function getHistoricalTasksForDay(
   });
 }
 
-export function getTaskFocusedMinutes(task: DailyTask, sessions: Session[]): number {
-  if (!sessions || !Array.isArray(sessions)) return 0;
-  const linked = sessions.filter(
-    (s) => (s.taskId && s.taskId === task.id) || (task.linkedSessionIds && task.linkedSessionIds.includes(s.id))
-  );
-  return linked.reduce((acc, s) => acc + s.duration, 0);
+/**
+ * Formats minutes into human-friendly decimal hours without unnecessary trailing .0.
+ * Examples:
+ * 30m -> 0.5h, 45m -> 0.8h, 50m -> 0.8h, 60m -> 1h, 75m -> 1.3h,
+ * 90m -> 1.5h, 100m -> 1.7h, 120m -> 2h, 150m -> 2.5h, 225m -> 3.8h
+ */
+export function formatFocusHours(mins: number): string {
+  if (!mins || mins <= 0) return "0h";
+  const hours = mins / 60;
+  if (mins % 60 === 0) {
+    return `${hours}h`;
+  }
+  const rounded = Math.round(hours * 10) / 10;
+  if (rounded % 1 === 0) {
+    return `${Math.round(rounded)}h`;
+  }
+  return `${rounded}h`;
 }
 
-export function getTaskSessionCount(task: DailyTask, sessions: Session[]): number {
-  if (!sessions || !Array.isArray(sessions)) return 0;
-  const linked = sessions.filter(
-    (s) => (s.taskId && s.taskId === task.id) || (task.linkedSessionIds && task.linkedSessionIds.includes(s.id))
-  );
-  return linked.length;
+export type TaskEvidence = {
+  sessions: Session[];
+  sessionCount: number;
+  focusedMinutes: number;
+  formattedHours: string;
+};
+
+/**
+ * Canonical helper for task-linked Session evidence.
+ * Defensively matches:
+ * 1. Primary: session.taskId === task.id
+ * 2. Secondary: task.linkedSessionIds.includes(session.id)
+ * 3. Fallback for legacy data: session.topic matches task.title AND session date matches task date
+ *
+ * Optionally filters by local date (filterDateStr) for Journey historical day inspection.
+ * Deduplicates matching sessions by session.id.
+ */
+export function getTaskEvidence(
+  task: DailyTask,
+  sessions: Session[] | undefined,
+  filterDateStr?: string
+): TaskEvidence {
+  if (!sessions || !Array.isArray(sessions) || sessions.length === 0) {
+    return {
+      sessions: [],
+      sessionCount: 0,
+      focusedMinutes: 0,
+      formattedHours: "0h",
+    };
+  }
+
+  const linkedMap = new Map<string, Session>();
+
+  for (const s of sessions) {
+    const isPrimary = Boolean(s.taskId && s.taskId === task.id);
+    const isSecondary = Boolean(Array.isArray(task.linkedSessionIds) && task.linkedSessionIds.includes(s.id));
+    const isLegacyFallback = Boolean(
+      !s.taskId &&
+      (!task.linkedSessionIds || task.linkedSessionIds.length === 0) &&
+      s.topic &&
+      task.title &&
+      s.topic.trim().toLowerCase() === task.title.trim().toLowerCase() &&
+      s.completedAt &&
+      localDay(s.completedAt) === task.date
+    );
+
+    if (isPrimary || isSecondary || isLegacyFallback) {
+      linkedMap.set(s.id, s);
+    }
+  }
+
+  let matchedSessions = Array.from(linkedMap.values());
+
+  if (filterDateStr) {
+    matchedSessions = matchedSessions.filter(
+      (s) => s.completedAt && localDay(s.completedAt) === filterDateStr
+    );
+  }
+
+  const focusedMinutes = matchedSessions.reduce((acc, s) => acc + (s.duration || 0), 0);
+  const sessionCount = matchedSessions.length;
+
+  return {
+    sessions: matchedSessions,
+    sessionCount,
+    focusedMinutes,
+    formattedHours: formatFocusHours(focusedMinutes),
+  };
+}
+
+export function getTaskFocusedMinutes(task: DailyTask, sessions: Session[], filterDateStr?: string): number {
+  return getTaskEvidence(task, sessions, filterDateStr).focusedMinutes;
+}
+
+export function getTaskSessionCount(task: DailyTask, sessions: Session[], filterDateStr?: string): number {
+  return getTaskEvidence(task, sessions, filterDateStr).sessionCount;
 }
 
 export function getDailySummary(

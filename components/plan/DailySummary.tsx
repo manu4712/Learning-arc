@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { minutes } from "@/lib/data";
+import { formatFocusHours } from "@/lib/planning";
 
 type DailySummaryProps = {
   summary: {
@@ -23,7 +23,7 @@ export default function DailySummary({ summary }: DailySummaryProps) {
       </div>
 
       <div className="summary-pill">
-        <strong>{minutes(summary.totalFocusMins)}</strong>
+        <strong>{formatFocusHours(summary.totalFocusMins)}</strong>
         <span>evidence-backed focus</span>
       </div>
 
