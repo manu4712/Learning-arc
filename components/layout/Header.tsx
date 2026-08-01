@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { usePomodoro } from "@/components/context/PomodoroContext";
 import ThemeToggle from "./ThemeToggle";
 import { Goal } from "@/lib/data";
@@ -23,23 +23,6 @@ export default function Header({
   setMenuOpen,
 }: HeaderProps) {
   const { state: pomodoroState, remainingMs } = usePomodoro();
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const current = window.scrollY;
-      setScrolled((prev) => {
-        if (!prev && current > 32) return true;
-        if (prev && current < 12) return false;
-        return prev;
-      });
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   const totalSeconds = Math.ceil(remainingMs / 1000);
   const minsStr = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
@@ -51,7 +34,7 @@ export default function Header({
     pomodoroState.phase === "long";
 
   return (
-    <header className={`site-header ${scrolled ? "scrolled" : ""}`}>
+    <header className="site-header">
       <button
         className="brand"
         onClick={() => {
@@ -105,7 +88,7 @@ export default function Header({
             }}
             className={`nav-link ${activeScreen === scr ? "active" : ""}`}
           >
-            {scr}
+            {scr === "today" ? "Home" : scr}
           </button>
         ))}
       </nav>

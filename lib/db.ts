@@ -43,6 +43,8 @@ export type PublicProfileSnapshot = {
     stage: "Learned" | "Practiced" | "Applied";
     sessionCount: number;
   }[];
+  tasks?: unknown[];
+  dailyPlans?: Record<string, unknown>;
   report?: {
     createdAt: string;
     narrative: string;

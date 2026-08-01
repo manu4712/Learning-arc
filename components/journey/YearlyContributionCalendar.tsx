@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useMemo, useCallback } from "react";
 import {
   Session,
   Store,
@@ -15,6 +15,7 @@ import {
   getPlanForDay,
   getTaskEvidence,
 } from "@/lib/planning";
+import { formatPastTenseMode } from "@/lib/skills";
 
 type YearlyContributionCalendarProps = {
   store?: Store;
@@ -42,7 +43,12 @@ const MONTH_NAMES = [
   "Dec",
 ];
 
-export default function YearlyContributionCalendar({
+type FormattedCalendarDay = {
+  dayInfo: CalendarDayInfo;
+  formattedDate: string;
+};
+
+function YearlyContributionCalendarInner({
   store,
   sessions,
   selectedYear,
@@ -55,51 +61,64 @@ export default function YearlyContributionCalendar({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const selectedDayEvidenceRef = useRef<HTMLDivElement | null>(null);
 
-  const stats = getYearStats(sessions, selectedYear);
-  const daysInYear = getYearCalendarDays(selectedYear);
+  const stats = useMemo(() => getYearStats(sessions, selectedYear), [sessions, selectedYear]);
+  const daysInYear = useMemo(() => getYearCalendarDays(selectedYear), [selectedYear]);
 
-  const historicalTasks = selectedDay ? getHistoricalTasksForDay(store?.tasks, selectedDay) : [];
-  const planForDay = selectedDay ? getPlanForDay(store?.dailyPlans, selectedDay) : null;
+  const historicalTasks = useMemo(
+    () => (selectedDay ? getHistoricalTasksForDay(store?.tasks, selectedDay) : []),
+    [store?.tasks, selectedDay]
+  );
+  const planForDay = useMemo(
+    () => (selectedDay ? getPlanForDay(store?.dailyPlans, selectedDay) : null),
+    [store?.dailyPlans, selectedDay]
+  );
 
-  // Group days by exact calendar months (Jan = 0 .. Dec = 11)
-  const monthBlocks = MONTH_NAMES.map((monthName, mIdx) => {
-    const daysInMonth = daysInYear.filter((d) => d.monthIndex === mIdx);
-    const firstDayOfWeek = daysInMonth[0] ? daysInMonth[0].dayOfWeek : 0;
+  // Group days by exact calendar months with pre-formatted date strings
+  const monthBlocks = useMemo(() => {
+    return MONTH_NAMES.map((monthName, mIdx) => {
+      const daysInMonth = daysInYear.filter((d) => d.monthIndex === mIdx);
+      const firstDayOfWeek = daysInMonth[0] ? daysInMonth[0].dayOfWeek : 0;
 
-    const weeks: (CalendarDayInfo | null)[][] = [];
-    let currentWeek: (CalendarDayInfo | null)[] = Array(firstDayOfWeek).fill(null);
+      const weeks: (FormattedCalendarDay | null)[][] = [];
+      let currentWeek: (FormattedCalendarDay | null)[] = Array(firstDayOfWeek).fill(null);
 
-    daysInMonth.forEach((dayInfo) => {
-      currentWeek.push(dayInfo);
-      if (currentWeek.length === 7) {
+      daysInMonth.forEach((dayInfo) => {
+        const formattedDate = dayInfo.dateObj.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+        currentWeek.push({ dayInfo, formattedDate });
+        if (currentWeek.length === 7) {
+          weeks.push(currentWeek);
+          currentWeek = [];
+        }
+      });
+
+      if (currentWeek.length > 0) {
+        while (currentWeek.length < 7) {
+          currentWeek.push(null);
+        }
         weeks.push(currentWeek);
-        currentWeek = [];
       }
+
+      return {
+        monthIndex: mIdx,
+        monthName,
+        weeks,
+      };
     });
-
-    if (currentWeek.length > 0) {
-      while (currentWeek.length < 7) {
-        currentWeek.push(null);
-      }
-      weeks.push(currentWeek);
-    }
-
-    return {
-      monthIndex: mIdx,
-      monthName,
-      weeks,
-    };
-  });
+  }, [daysInYear]);
 
   // Handle day click & smooth scroll on mobile
-  const handleDayClick = (dateStr: string) => {
+  const handleDayClick = useCallback((dateStr: string) => {
     onSelectDay(dateStr);
     if (typeof window !== "undefined" && window.innerWidth <= 768) {
       setTimeout(() => {
         selectedDayEvidenceRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }, 50);
     }
-  };
+  }, [onSelectDay]);
 
   // Mobile initial scroll to current month block if viewing current year
   useEffect(() => {
@@ -115,9 +134,10 @@ export default function YearlyContributionCalendar({
   }, [selectedYear]);
 
   // Selected day's session list
-  const selectedDaySessions = selectedDay
-    ? sessions.filter((s) => s.completedAt && localDay(s.completedAt) === selectedDay)
-    : [];
+  const selectedDaySessions = useMemo(
+    () => (selectedDay ? sessions.filter((s) => s.completedAt && localDay(s.completedAt) === selectedDay) : []),
+    [sessions, selectedDay]
+  );
 
   return (
     <div className="yearly-calendar-container">
@@ -188,11 +208,12 @@ export default function YearlyContributionCalendar({
                 <div className="month-weeks-grid">
                   {mb.weeks.map((week, colIdx) => (
                     <div key={colIdx} className="week-column">
-                      {week.map((dayInfo, rowIdx) => {
-                        if (!dayInfo) {
+                      {week.map((item, rowIdx) => {
+                        if (!item) {
                           return <span key={rowIdx} className="calendar-cell empty-slot" />;
                         }
 
+                        const { dayInfo, formattedDate } = item;
                         const mins = stats.dailyTotals[dayInfo.dateStr] || 0;
                         const level =
                           mins === 0
@@ -206,11 +227,6 @@ export default function YearlyContributionCalendar({
                             : 4;
 
                         const isSelected = selectedDay === dayInfo.dateStr;
-                        const formattedDate = dayInfo.dateObj.toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        });
 
                         const labelText =
                           mins > 0
@@ -345,7 +361,7 @@ export default function YearlyContributionCalendar({
                       <div className="session-header">
                         <div className="session-topic">{s.topic}</div>
                         <div className="session-badges">
-                          <span className={`mode-pill ${s.mode.toLowerCase()}`}>{s.mode}</span>
+                          <span className={`mode-pill ${s.mode.toLowerCase()}`}>{formatPastTenseMode(s.mode)}</span>
                           <span className="duration-pill">{minutes(s.duration)}</span>
                         </div>
                       </div>
@@ -403,3 +419,6 @@ export default function YearlyContributionCalendar({
     </div>
   );
 }
+
+const YearlyContributionCalendar = React.memo(YearlyContributionCalendarInner);
+export default YearlyContributionCalendar;

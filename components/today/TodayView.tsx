@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import { usePomodoro } from "@/components/context/PomodoroContext";
 import { Goal, Session, stats as calculateStats, minutes } from "@/lib/data";
 
 type Screen = "today" | "plan" | "focus" | "journey" | "insights" | "proof" | "settings";
@@ -21,13 +20,7 @@ export default function TodayView({
   onNavigate,
   onRetryAnalysis,
 }: TodayViewProps) {
-  const { state: pomodoroState } = usePomodoro();
   const [retryingId, setRetryingId] = useState<string | null>(null);
-
-  const isTimerRunning =
-    pomodoroState.phase === "focus" ||
-    pomodoroState.phase === "short" ||
-    pomodoroState.phase === "long";
 
   const recentSessions = [...sessions]
     .sort((a, b) => +new Date(b.completedAt) - +new Date(a.completedAt))
@@ -49,22 +42,16 @@ export default function TodayView({
       {/* Hero Section */}
       <div className="hero">
         <div className="hero-content">
-          <span className="eyebrow">TODAY’S DIRECTION</span>
+          <span className="eyebrow">CURRENT MISSION</span>
           <h1 className="hero-title">{goal.title}</h1>
           <p className="hero-desc">{goal.description || "Turn focused effort into independent capability."}</p>
         </div>
         <div className="hero-action-buttons">
           <button
-            className="secondary hero-cta-btn"
+            className="primary hero-cta-btn"
             onClick={() => onNavigate("plan")}
           >
             Open Plan →
-          </button>
-          <button
-            className="primary hero-cta-btn"
-            onClick={() => onNavigate("focus")}
-          >
-            {isTimerRunning ? "Return to Active Focus →" : "Start a Focus Session →"}
           </button>
         </div>
       </div>
@@ -149,8 +136,7 @@ export default function TodayView({
                   <div className="event-details">
                     <strong>{s.topic}</strong>
                     <p className="event-meta">
-                      <span className={`mode-mark ${s.mode.toLowerCase()}`}>{s.mode}</span> · {minutes(s.duration)} ·{" "}
-                      {s.analysis?.evidence || "unanalysed"} evidence
+                      <span className={`mode-mark ${s.mode.toLowerCase()}`}>{s.mode}</span> · {minutes(s.duration)}
                     </p>
                     <small className="event-summary">{s.analysis?.summary || s.reflection}</small>
                     {s.analysisError && (

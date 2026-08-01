@@ -2,21 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { savePublicProfile, getPublicProfile, getPublicProfileWithToken, deletePublicProfile, PublicProfileSnapshot } from "@/lib/db";
 import { stats as calculateStats, Session } from "@/lib/data";
+import { aggregateCoreSkills } from "@/lib/skills";
 
 const publishPayloadSchema = z.object({
   id: z.string().optional(),
   managementToken: z.string().optional(),
   displayName: z.string().max(80).optional(),
   store: z.object({
-    version: z.literal(1),
-    goal: z.object({
-      title: z.string().max(120),
-      description: z.string().max(500).optional(),
-      duration: z.string().max(50),
-      createdAt: z.string(),
-    }),
-    sessions: z.array(z.any()),
-    report: z.any().optional(),
+    version: z.union([z.literal(1), z.literal(2), z.number()]),
+    goal: z
+      .object({
+        title: z.string().optional().nullable(),
+        description: z.string().optional().nullable(),
+        duration: z.string().optional().nullable(),
+        createdAt: z.string().optional().nullable(),
+      })
+      .optional()
+      .nullable(),
+    sessions: z.array(z.any()).default([]),
+    tasks: z.array(z.any()).optional().default([]),
+    dailyPlans: z.record(z.string(), z.any()).optional().default({}),
+    report: z.any().optional().nullable(),
   }),
 });
 
@@ -31,8 +37,11 @@ export async function POST(req: NextRequest) {
     const parsed = publishPayloadSchema.parse(json);
     const { store, displayName } = parsed;
 
-    if (!store.goal) {
-      return NextResponse.json({ error: "A goal is required to publish a learning journey." }, { status: 400 });
+    if (!store.goal || !store.goal.title || !store.goal.title.trim()) {
+      return NextResponse.json(
+        { error: "A goal is required to publish a learning journey. Set your current mission on the Home screen first." },
+        { status: 400 }
+      );
     }
 
     let id = parsed.id;
@@ -61,33 +70,13 @@ export async function POST(req: NextRequest) {
 
     const st = calculateStats(store.sessions as Session[]);
 
-    // Aggregate skill signals with stages
-    const skillMap: Record<string, { stage: "Learned" | "Practiced" | "Applied"; count: number }> = {};
-    (store.sessions as Session[]).forEach((s) => {
-      const detectedSkills = s.analysis?.skills || [s.topic];
-      detectedSkills.forEach((skill) => {
-        const current = skillMap[skill];
-        const newStage = s.mode === "Building" ? "Applied" : s.mode === "Practicing" ? "Practiced" : "Learned";
-        const priority: Record<string, number> = { Learned: 1, Practiced: 2, Applied: 3 };
-
-        if (!current) {
-          skillMap[skill] = { stage: newStage, count: 1 };
-        } else {
-          current.count += 1;
-          if (priority[newStage] > priority[current.stage]) {
-            current.stage = newStage;
-          }
-        }
-      });
-    });
-
-    const formattedSkills = Object.entries(skillMap)
-      .map(([skill, data]) => ({
-        skill,
-        stage: data.stage,
-        sessionCount: data.count,
-      }))
-      .sort((a, b) => b.sessionCount - a.sessionCount);
+    // Aggregate skill signals into durable Core Skills
+    const coreSkillGroups = aggregateCoreSkills(store.sessions as Session[]);
+    const formattedSkills = coreSkillGroups.map((g) => ({
+      skill: g.skill,
+      stage: g.stage,
+      sessionCount: g.sessions.length,
+    }));
 
     // Format public session evidence (sanitized, no internal fields)
     const publicSessions = (store.sessions as Session[])
@@ -120,10 +109,10 @@ export async function POST(req: NextRequest) {
       updatedAt: nowIso,
       displayName: displayName?.trim() || undefined,
       goal: {
-        title: store.goal.title,
-        description: store.goal.description,
-        duration: store.goal.duration,
-        createdAt: store.goal.createdAt,
+        title: store.goal.title.trim(),
+        description: store.goal.description || undefined,
+        duration: store.goal.duration || "Self-Paced",
+        createdAt: store.goal.createdAt || nowIso,
       },
       stats: {
         totalMinutes: st.total,
@@ -134,6 +123,8 @@ export async function POST(req: NextRequest) {
       },
       sessions: publicSessions,
       skills: formattedSkills,
+      tasks: store.tasks || [],
+      dailyPlans: store.dailyPlans || {},
       report: store.report
         ? {
             createdAt: store.report.createdAt,
@@ -155,7 +146,15 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("Publish endpoint error:", e);
-    return NextResponse.json({ error: "Failed to publish learning journey snapshot." }, { status: 500 });
+    if (e instanceof z.ZodError) {
+      const issues = e.issues.map((i) => `${i.path.join(".") || "payload"}: ${i.message}`).join("; ");
+      return NextResponse.json(
+        { error: `Invalid publish request payload: ${issues}` },
+        { status: 400 }
+      );
+    }
+    const message = e instanceof Error ? e.message : "Failed to publish learning journey snapshot.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -177,7 +176,15 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Unpublish endpoint error:", e);
-    return NextResponse.json({ error: "Failed to unpublish profile." }, { status: 500 });
+    if (e instanceof z.ZodError) {
+      const issues = e.issues.map((i) => `${i.path.join(".") || "payload"}: ${i.message}`).join("; ");
+      return NextResponse.json(
+        { error: `Invalid unpublish payload: ${issues}` },
+        { status: 400 }
+      );
+    }
+    const message = e instanceof Error ? e.message : "Failed to unpublish profile.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

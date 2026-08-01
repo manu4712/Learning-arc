@@ -20,6 +20,8 @@ export type Goal = {
 export type Analysis = {
   summary: string;
   skills: string[];
+  domain?: string;
+  concepts?: string[];
   classification: "guided" | "practice" | "application" | "exploration";
   evidence: "low" | "medium" | "high";
   progression: string;

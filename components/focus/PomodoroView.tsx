@@ -39,6 +39,37 @@ export default function PomodoroView({ goal, onCompleteSession, targetTask }: Po
   const [cycles, setCycles] = useState(state.cycles || 4);
   const [autoStart, setAutoStart] = useState(state.autoStart || false);
 
+  // String states to allow temporary empty values while editing
+  const [focusMinsStr, setFocusMinsStr] = useState(String(state.focusMins || 25));
+  const [shortMinsStr, setShortMinsStr] = useState(String(state.shortMins || 5));
+  const [longMinsStr, setLongMinsStr] = useState(String(state.longMins || 15));
+  const [cyclesStr, setCyclesStr] = useState(String(state.cycles || 4));
+
+  // Blur handlers
+  const handleBlurField = (field: "focus" | "short" | "cycles" | "long") => {
+    if (field === "focus") {
+      const parsed = parseInt(focusMinsStr, 10);
+      const valid = isNaN(parsed) || parsed < 1 ? 25 : Math.min(120, parsed);
+      setFocusMins(valid);
+      setFocusMinsStr(String(valid));
+    } else if (field === "short") {
+      const parsed = parseInt(shortMinsStr, 10);
+      const valid = isNaN(parsed) || parsed < 1 ? 5 : Math.min(60, parsed);
+      setShortMins(valid);
+      setShortMinsStr(String(valid));
+    } else if (field === "cycles") {
+      const parsed = parseInt(cyclesStr, 10);
+      const valid = isNaN(parsed) || parsed < 1 ? 4 : Math.min(8, parsed);
+      setCycles(valid);
+      setCyclesStr(String(valid));
+    } else if (field === "long") {
+      const parsed = parseInt(longMinsStr, 10);
+      const valid = isNaN(parsed) || parsed < 1 ? 15 : Math.min(90, parsed);
+      setLongMins(valid);
+      setLongMinsStr(String(valid));
+    }
+  };
+
   // Prefill setup if launched from a task
   useEffect(() => {
     if (targetTask && state.phase === "idle") {
@@ -60,10 +91,22 @@ export default function PomodoroView({ goal, onCompleteSession, targetTask }: Po
       if (state.customActivity !== undefined) setCustomActivity(state.customActivity);
       if (!targetTask && state.topic) setTopic(state.topic);
       if (state.intent !== undefined) setIntent(state.intent);
-      if (state.focusMins) setFocusMins(state.focusMins);
-      if (state.shortMins) setShortMins(state.shortMins);
-      if (state.longMins) setLongMins(state.longMins);
-      if (state.cycles) setCycles(state.cycles);
+      if (state.focusMins) {
+        setFocusMins(state.focusMins);
+        setFocusMinsStr(String(state.focusMins));
+      }
+      if (state.shortMins) {
+        setShortMins(state.shortMins);
+        setShortMinsStr(String(state.shortMins));
+      }
+      if (state.longMins) {
+        setLongMins(state.longMins);
+        setLongMinsStr(String(state.longMins));
+      }
+      if (state.cycles) {
+        setCycles(state.cycles);
+        setCyclesStr(String(state.cycles));
+      }
       if (state.autoStart !== undefined) setAutoStart(state.autoStart);
     }
   }, [state, targetTask]);
@@ -91,15 +134,29 @@ export default function PomodoroView({ goal, onCompleteSession, targetTask }: Po
     if (!topic.trim()) return;
     if (mode === "Other" && !customActivity.trim()) return;
 
+    const validFocus = Math.max(1, Math.min(120, parseInt(focusMinsStr, 10) || focusMins || 25));
+    const validShort = Math.max(1, Math.min(60, parseInt(shortMinsStr, 10) || shortMins || 5));
+    const validCycles = Math.max(1, Math.min(8, parseInt(cyclesStr, 10) || cycles || 4));
+    const validLong = Math.max(1, Math.min(90, parseInt(longMinsStr, 10) || longMins || 15));
+
+    setFocusMins(validFocus);
+    setFocusMinsStr(String(validFocus));
+    setShortMins(validShort);
+    setShortMinsStr(String(validShort));
+    setCycles(validCycles);
+    setCyclesStr(String(validCycles));
+    setLongMins(validLong);
+    setLongMinsStr(String(validLong));
+
     startRound({
       mode,
       customActivity: mode === "Other" ? customActivity : undefined,
       topic: topic.trim(),
       intent: intent.trim(),
-      focusMins,
-      shortMins,
-      longMins,
-      cycles,
+      focusMins: validFocus,
+      shortMins: validShort,
+      longMins: validLong,
+      cycles: validCycles,
       autoStart,
       taskId: state.taskId || targetTask?.id,
     });
@@ -231,61 +288,101 @@ export default function PomodoroView({ goal, onCompleteSession, targetTask }: Po
               <span className="eyebrow">INTERVAL CONFIGURATION</span>
               <div className="duration-inputs">
                 <label className="input-field">
-                  Focus Mins
+                  <span>Focus Mins</span>
                   <input
                     type="number"
                     min="1"
                     max="120"
-                    value={focusMins}
-                    onChange={(e) => setFocusMins(Math.max(1, Math.min(120, +e.target.value || 1)))}
+                    className="native-number-input"
+                    value={focusMinsStr}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFocusMinsStr(val);
+                      const parsed = parseInt(val, 10);
+                      if (!isNaN(parsed) && parsed >= 1 && parsed <= 120) {
+                        setFocusMins(parsed);
+                      }
+                    }}
+                    onBlur={() => handleBlurField("focus")}
                   />
                 </label>
 
                 <label className="input-field">
-                  Short Break
+                  <span>Short Break</span>
                   <input
                     type="number"
                     min="1"
                     max="60"
-                    value={shortMins}
-                    onChange={(e) => setShortMins(Math.max(1, Math.min(60, +e.target.value || 1)))}
+                    className="native-number-input"
+                    value={shortMinsStr}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setShortMinsStr(val);
+                      const parsed = parseInt(val, 10);
+                      if (!isNaN(parsed) && parsed >= 1 && parsed <= 60) {
+                        setShortMins(parsed);
+                      }
+                    }}
+                    onBlur={() => handleBlurField("short")}
                   />
                 </label>
 
                 <label className="input-field">
-                  Focus Cycles
+                  <span>Focus Cycles</span>
                   <input
                     type="number"
                     min="1"
                     max="8"
-                    value={cycles}
-                    onChange={(e) => setCycles(Math.max(1, Math.min(8, +e.target.value || 1)))}
+                    className="native-number-input"
+                    value={cyclesStr}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCyclesStr(val);
+                      const parsed = parseInt(val, 10);
+                      if (!isNaN(parsed) && parsed >= 1 && parsed <= 8) {
+                        setCycles(parsed);
+                      }
+                    }}
+                    onBlur={() => handleBlurField("cycles")}
                   />
                 </label>
 
                 <label className="input-field">
-                  Long Break
+                  <span>Long Break</span>
                   <input
                     type="number"
                     min="1"
                     max="90"
-                    value={longMins}
-                    onChange={(e) => setLongMins(Math.max(1, Math.min(90, +e.target.value || 1)))}
+                    className="native-number-input"
+                    value={longMinsStr}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLongMinsStr(val);
+                      const parsed = parseInt(val, 10);
+                      if (!isNaN(parsed) && parsed >= 1 && parsed <= 90) {
+                        setLongMins(parsed);
+                      }
+                    }}
+                    onBlur={() => handleBlurField("long")}
                   />
                 </label>
               </div>
 
-              <label className="toggle-field">
+              <label className="modern-toggle-field">
                 <input
                   type="checkbox"
+                  className="toggle-checkbox-sr"
                   checked={autoStart}
                   onChange={(e) => setAutoStart(e.target.checked)}
                 />
-                Auto-start next timer phase
+                <span className="toggle-switch-track" aria-hidden="true">
+                  <span className="toggle-switch-thumb" />
+                </span>
+                <span className="toggle-label-text">Auto-start next timer phase</span>
               </label>
 
               <div className="setup-summary">
-                <p>{focusMins}m focus → {shortMins}m break × {cycles} → {longMins}m long break</p>
+                <p>{focusMinsStr || focusMins}m focus → {shortMinsStr || shortMins}m break × {cyclesStr || cycles} → {longMinsStr || longMins}m long break</p>
               </div>
 
               <button
