@@ -204,7 +204,22 @@ Future refinements will be driven by real-world usage rather than feature bloat:
 
 ## Screenshots
 
-*(Insert application screenshots or animated GIFs here)*
+<img width="1898" height="879" alt="image" src="https://github.com/user-attachments/assets/7c169bfe-f987-4d47-b6d0-ea88f6442b10" />
+<img width="1919" height="791" alt="image" src="https://github.com/user-attachments/assets/afadac7d-a23c-42bc-9dd4-6ae31ddbd4fa" />
+<img width="1891" height="852" alt="image" src="https://github.com/user-attachments/assets/21edf520-0267-42b6-a250-169d3df202ef" />
+<img width="1846" height="816" alt="image" src="https://github.com/user-attachments/assets/91b5ebb3-611c-44dc-92d3-dbaef3aaa9de" />
+<img width="1000" height="858" alt="image" src="https://github.com/user-attachments/assets/df5e161b-217e-4d48-853f-42f752a24d95" />
+<img width="981" height="579" alt="image" src="https://github.com/user-attachments/assets/a7f73d29-8b0b-4a62-b843-b6912f9c206d" />
+<img width="1199" height="862" alt="image" src="https://github.com/user-attachments/assets/c9aa905d-4626-44e2-9fcf-fe9f8b3dce78" />
+<img width="1436" height="858" alt="image" src="https://github.com/user-attachments/assets/3bef87ed-31bc-4786-b638-3ae75d726f47" />
+
+
+
+
+
+
+
+
 
 ---
 
