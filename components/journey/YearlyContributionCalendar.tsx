@@ -289,7 +289,7 @@ export default function YearlyContributionCalendar({
                       let statusText = "Left unfinished";
                       let statusClass = "unfinished";
 
-                      if (t.status === "completed") {
+                      if (t.status === "completed" && (t.date === selectedDay || (t.completedAt && localDay(t.completedAt) === selectedDay))) {
                         statusIcon = "✓";
                         if (t.completedManually && evidence.sessionCount === 0) {
                           statusText = "Completed manually";
@@ -298,15 +298,19 @@ export default function YearlyContributionCalendar({
                           statusText = `${evidence.formattedHours} focused · ${evidence.sessionCount} session${evidence.sessionCount === 1 ? "" : "s"}`;
                           statusClass = "completed-evidence";
                         }
+                      } else if (evidence.sessionCount > 0 || t.status === "in_progress") {
+                        statusIcon = "◔";
+                        const isCurrentlyCompleted = t.status === "completed";
+                        const statusLabel = isCurrentlyCompleted ? "Completed" : "In Progress";
+                        statusText = `${evidence.formattedHours} focused · ${evidence.sessionCount} session${evidence.sessionCount === 1 ? "" : "s"} · ${statusLabel}`;
+                        statusClass = "in-progress";
                       } else if (t.carriedFromDate && t.date !== selectedDay) {
                         statusIcon = "↗";
-                        statusText = `Carried forward to ${t.date}`;
+                        statusText = "Left unfinished";
                         statusClass = "rolled-over";
-                      } else if (t.status === "in_progress" || evidence.sessionCount > 0) {
-                        statusIcon = "◔";
-                        statusText = `${evidence.formattedHours} focused · ${evidence.sessionCount} session${evidence.sessionCount === 1 ? "" : "s"} · In progress`;
-                        statusClass = "in-progress";
                       }
+
+                      const isCarriedForwardFromHere = t.date !== selectedDay;
 
                       return (
                         <div key={t.id} className={`historical-task-card ${statusClass}`}>
@@ -314,7 +318,10 @@ export default function YearlyContributionCalendar({
                           <div className="hist-details">
                             <strong className="hist-title">{t.title}</strong>
                             <span className="hist-meta">{statusText}</span>
-                            {t.originalPlannedDate && t.originalPlannedDate !== selectedDay && (
+                            {isCarriedForwardFromHere && (
+                              <span className="hist-orig-tag">Carried forward to {t.date}</span>
+                            )}
+                            {t.originalPlannedDate && t.originalPlannedDate !== selectedDay && !isCarriedForwardFromHere && (
                               <span className="hist-orig-tag">Originally planned {t.originalPlannedDate}</span>
                             )}
                           </div>
