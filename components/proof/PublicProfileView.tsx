@@ -20,13 +20,16 @@ export default function PublicProfileView({ profile }: { profile: PublicProfileV
 
   const storeForCalendar = useMemo<Store>(
     () => ({
-      version: 2,
+      id: profile.id,
+      version: 3,
+      createdAt: profile.publishedAt,
+      updatedAt: profile.updatedAt,
       goal: profile.goal as Store["goal"],
       sessions: sessions,
       tasks: (profile.tasks || []) as DailyTask[],
       dailyPlans: (profile.dailyPlans || {}) as Record<string, DailyPlan>,
     }),
-    [profile.goal, profile.tasks, profile.dailyPlans, sessions]
+    [profile, sessions]
   );
 
   return (

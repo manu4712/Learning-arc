@@ -13,26 +13,39 @@ import SettingsView from "@/components/settings/SettingsView";
 import GoalSetup from "@/components/onboarding/GoalSetup";
 import ThemeToggle from "@/components/layout/ThemeToggle";
 import TaskOutcomeModal from "@/components/plan/TaskOutcomeModal";
+import CreateGoalModal from "@/components/modals/CreateGoalModal";
+import ManageGoalsModal from "@/components/modals/ManageGoalsModal";
 import {
-  EMPTY,
+  EMPTY_MULTI_STORE,
+  EMPTY_GOAL_STORE,
   Goal,
   Session,
-  Store,
+  GoalStore,
+  MultiGoalStore,
   Analysis,
   DailyTask,
-  load as loadStore,
-  save as saveStore,
+  loadMultiStore,
+  saveMultiStore,
+  createGoal as createGoalInStore,
+  switchGoal as switchGoalInStore,
+  renameGoalInStore,
+  archiveGoalInStore,
+  deleteGoalFromStore,
   stats as calculateStats,
 } from "@/lib/data";
 
 type Screen = "today" | "plan" | "focus" | "journey" | "insights" | "proof" | "settings";
 
 function LearningArcContent() {
-  const [store, setStore] = useState<Store>(EMPTY);
+  const [multiStore, setMultiStore] = useState<MultiGoalStore>(EMPTY_MULTI_STORE);
   const [ready, setReady] = useState(false);
   const [screen, setScreen] = useState<Screen>("today");
   const [onboard, setOnboard] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Modals for multi-goal support
+  const [createGoalModalOpen, setCreateGoalModalOpen] = useState(false);
+  const [manageGoalsModalOpen, setManageGoalsModalOpen] = useState(false);
 
   // Active task selected to launch Focus from Plan
   const [targetTaskForFocus, setTargetTaskForFocus] = useState<DailyTask | undefined>(undefined);
@@ -41,22 +54,77 @@ function LearningArcContent() {
   const [pendingOutcomeTask, setPendingOutcomeTask] = useState<DailyTask | undefined>(undefined);
 
   useEffect(() => {
-    const loaded = loadStore();
-    setStore(loaded);
-    setOnboard(!loaded.goal);
+    const loadedMulti = loadMultiStore();
+    setMultiStore(loadedMulti);
+    const active = loadedMulti.goals[loadedMulti.activeGoalId];
+    setOnboard(!active || !active.goal?.title);
     setReady(true);
   }, []);
 
-  useEffect(() => {
-    if (ready) {
-      saveStore(store);
+  // Compute active GoalStore derived from activeGoalId
+  const activeGoalStore: GoalStore = useMemo(() => {
+    if (multiStore.activeGoalId && multiStore.goals[multiStore.activeGoalId]) {
+      return multiStore.goals[multiStore.activeGoalId];
     }
-  }, [store, ready]);
+    const firstId = Object.keys(multiStore.goals)[0];
+    if (firstId && multiStore.goals[firstId]) {
+      return multiStore.goals[firstId];
+    }
+    return EMPTY_GOAL_STORE;
+  }, [multiStore]);
 
-  const st = useMemo(() => calculateStats(store.sessions), [store.sessions]);
+  const st = useMemo(
+    () => calculateStats(activeGoalStore.sessions || []),
+    [activeGoalStore.sessions]
+  );
 
-  const updateStore = (patch: Partial<Store>) => {
-    setStore((current) => ({ ...current, ...patch }));
+  const updateStore = (patch: Partial<GoalStore>) => {
+    setMultiStore((current) => {
+      const activeId = current.activeGoalId;
+      if (!activeId || !current.goals[activeId]) return current;
+      const currentGoalStore = current.goals[activeId];
+      const updatedGoalStore: GoalStore = {
+        ...currentGoalStore,
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      };
+      const updatedMulti: MultiGoalStore = {
+        ...current,
+        goals: {
+          ...current.goals,
+          [activeId]: updatedGoalStore,
+        },
+      };
+      saveMultiStore(updatedMulti);
+      return updatedMulti;
+    });
+  };
+
+  // Multi-Goal Handler Functions
+  const handleSelectGoal = (goalId: string) => {
+    const updated = switchGoalInStore(multiStore, goalId);
+    setMultiStore(updated);
+  };
+
+  const handleCreateGoal = (title: string, description?: string, duration?: string) => {
+    const updated = createGoalInStore(multiStore, title, description, duration);
+    setMultiStore(updated);
+    setOnboard(false);
+  };
+
+  const handleRenameGoal = (goalId: string, title: string, description?: string) => {
+    const updated = renameGoalInStore(multiStore, goalId, title, description);
+    setMultiStore(updated);
+  };
+
+  const handleArchiveGoal = (goalId: string) => {
+    const updated = archiveGoalInStore(multiStore, goalId);
+    setMultiStore(updated);
+  };
+
+  const handleDeleteGoal = (goalId: string) => {
+    const updated = deleteGoalFromStore(multiStore, goalId);
+    setMultiStore(updated);
   };
 
   const handleLaunchTaskFocus = (task: DailyTask) => {
@@ -65,9 +133,10 @@ function LearningArcContent() {
   };
 
   const handleCompleteSession = (newSession: Session) => {
-    // 1. Reflection session evidence is saved FIRST (Clarification 1)
-    const updatedSessions = [...store.sessions, newSession];
-    let updatedTasks = store.tasks || [];
+    // 1. Reflection session evidence is saved FIRST
+    const currentSessions = activeGoalStore.sessions || [];
+    const updatedSessions = [...currentSessions, newSession];
+    let updatedTasks = activeGoalStore.tasks || [];
 
     if (newSession.taskId) {
       // Append session ID to task.linkedSessionIds
@@ -104,7 +173,7 @@ function LearningArcContent() {
   };
 
   const handleTaskOutcome = (taskId: string, outcome: "completed" | "in_progress") => {
-    const existing = store.tasks || [];
+    const existing = activeGoalStore.tasks || [];
     const completedAt = outcome === "completed" ? new Date().toISOString() : undefined;
     const updated = existing.map((t) =>
       t.id === taskId ? { ...t, status: outcome, completedAt } : t
@@ -116,24 +185,23 @@ function LearningArcContent() {
   };
 
   const handleRetrySessionAnalysis = async (id: string) => {
-    const session = store.sessions.find((s) => s.id === id);
+    const session = (activeGoalStore.sessions || []).find((s) => s.id === id);
     if (!session) return;
 
     const res = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "session", goal: store.goal, data: session }),
+      body: JSON.stringify({ kind: "session", goal: activeGoalStore.goal, data: session }),
     });
 
     if (!res.ok) throw new Error("Analysis request failed");
 
     const analysis = (await res.json()) as Analysis;
-    setStore((current) => ({
-      ...current,
-      sessions: current.sessions.map((s) =>
+    updateStore({
+      sessions: (activeGoalStore.sessions || []).map((s) =>
         s.id === id ? { ...s, analysis, analysisError: false } : s
       ),
-    }));
+    });
   };
 
   if (!ready) {
@@ -155,7 +223,7 @@ function LearningArcContent() {
           <ThemeToggle />
         </header>
         <GoalSetup
-          initial={store.goal}
+          initial={activeGoalStore.goal}
           onDone={(newGoal: Goal) => {
             updateStore({ goal: newGoal });
             setOnboard(false);
@@ -177,7 +245,10 @@ function LearningArcContent() {
       <Header
         activeScreen={screen}
         onSelectScreen={handleSelectScreen}
-        goal={store.goal}
+        multiStore={multiStore}
+        onSelectGoal={handleSelectGoal}
+        onCreateGoal={() => setCreateGoalModalOpen(true)}
+        onManageGoals={() => setManageGoalsModalOpen(true)}
         menuOpen={menuOpen}
         setMenuOpen={setMenuOpen}
       />
@@ -185,9 +256,9 @@ function LearningArcContent() {
       <main className="app-main-content">
         {screen === "today" && (
           <TodayView
-            goal={store.goal!}
+            goal={activeGoalStore.goal!}
             st={st}
-            sessions={store.sessions}
+            sessions={activeGoalStore.sessions || []}
             onNavigate={handleSelectScreen}
             onRetryAnalysis={handleRetrySessionAnalysis}
           />
@@ -195,7 +266,7 @@ function LearningArcContent() {
 
         {screen === "plan" && (
           <PlanView
-            store={store}
+            store={activeGoalStore}
             onUpdateStore={updateStore}
             onLaunchFocus={handleLaunchTaskFocus}
           />
@@ -203,27 +274,39 @@ function LearningArcContent() {
 
         {screen === "focus" && (
           <PomodoroView
-            goal={store.goal!}
+            goal={activeGoalStore.goal!}
             targetTask={targetTaskForFocus}
             onCompleteSession={handleCompleteSession}
           />
         )}
 
         {screen === "journey" && (
-          <JourneyView store={store} sessions={store.sessions} st={st} />
+          <JourneyView
+            store={activeGoalStore}
+            sessions={activeGoalStore.sessions || []}
+            st={st}
+          />
         )}
 
         {screen === "insights" && (
-          <InsightsView store={store} st={st} onUpdateStore={updateStore} />
+          <InsightsView
+            store={activeGoalStore}
+            st={st}
+            onUpdateStore={updateStore}
+          />
         )}
 
         {screen === "proof" && (
-          <ProofView goal={store.goal!} store={store} st={st} />
+          <ProofView
+            goal={activeGoalStore.goal!}
+            store={activeGoalStore}
+            st={st}
+          />
         )}
 
         {screen === "settings" && (
           <SettingsView
-            store={store}
+            store={activeGoalStore}
             onUpdateStore={updateStore}
             onEditGoal={() => setOnboard(true)}
           />
@@ -234,8 +317,28 @@ function LearningArcContent() {
       {pendingOutcomeTask && (
         <TaskOutcomeModal
           task={pendingOutcomeTask}
-          sessions={store.sessions}
+          sessions={activeGoalStore.sessions || []}
           onOutcome={handleTaskOutcome}
+        />
+      )}
+
+      {/* Multi-Goal Modals */}
+      {createGoalModalOpen && (
+        <CreateGoalModal
+          onClose={() => setCreateGoalModalOpen(false)}
+          onCreate={handleCreateGoal}
+        />
+      )}
+
+      {manageGoalsModalOpen && (
+        <ManageGoalsModal
+          multiStore={multiStore}
+          onClose={() => setManageGoalsModalOpen(false)}
+          onSelectGoal={handleSelectGoal}
+          onRenameGoal={handleRenameGoal}
+          onArchiveGoal={handleArchiveGoal}
+          onDeleteGoal={handleDeleteGoal}
+          onCreateNewGoal={() => setCreateGoalModalOpen(true)}
         />
       )}
     </div>

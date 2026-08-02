@@ -87,67 +87,332 @@ export type Report = {
   gap: string;
 };
 
-export type Store = {
-  version: 2;
-  goal?: Goal;
-  sessions: Session[];
-  report?: Report;
-  tasks?: DailyTask[];
-  dailyPlans?: Record<string, DailyPlan>;
+export type PublicProfileInfo = {
+  id: string;
+  managementToken: string;
+  publicUrl: string;
+  updatedAt: string;
 };
 
-export const EMPTY: Store = { version: 2, sessions: [], tasks: [], dailyPlans: {} };
+export type GoalStore = {
+  id: string;
+  version: 3;
+  goal?: Goal;
+  sessions: Session[];
+  tasks?: DailyTask[];
+  dailyPlans?: Record<string, DailyPlan>;
+  report?: Report;
+  publicProfile?: PublicProfileInfo;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string;
+};
 
-const key = "learning-arc-v1";
+export type MultiGoalStore = {
+  version: 3;
+  activeGoalId: string;
+  goals: Record<string, GoalStore>;
+};
 
-export function load(): Store {
+export type Store = GoalStore;
+
+export const EMPTY_GOAL_STORE: GoalStore = {
+  id: "goal_default",
+  version: 3,
+  sessions: [],
+  tasks: [],
+  dailyPlans: {},
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
+export const EMPTY_MULTI_STORE: MultiGoalStore = {
+  version: 3,
+  activeGoalId: "goal_default",
+  goals: {
+    goal_default: EMPTY_GOAL_STORE,
+  },
+};
+
+export const EMPTY: Store = EMPTY_GOAL_STORE;
+
+const multiKey = "learning-arc-multi-v3";
+const legacyKey = "learning-arc-v1";
+
+export function loadMultiStore(): MultiGoalStore {
   try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return EMPTY;
-    const p = JSON.parse(raw);
-    if (p && typeof p === "object") {
-      // Migrate Version 1 store seamlessly to Version 2
-      if (p.version === 1 && Array.isArray(p.sessions)) {
-        return {
-          version: 2,
-          goal: p.goal,
-          sessions: p.sessions,
-          report: p.report,
-          tasks: [],
-          dailyPlans: {},
-        };
-      }
-      // Version 2 store
-      if (p.version === 2 && Array.isArray(p.sessions)) {
-        const rawTasks = Array.isArray(p.tasks) ? p.tasks : [];
-        // Permanently strip legacy archived DailyTask objects from store.tasks (Session evidence preserved!)
-        const cleanTasks = rawTasks.filter((t: DailyTask) => t && (t.status as string) !== "archived");
-        return {
-          version: 2,
-          goal: p.goal,
-          sessions: p.sessions,
-          report: p.report,
-          tasks: cleanTasks,
-          dailyPlans: p.dailyPlans && typeof p.dailyPlans === "object" ? p.dailyPlans : {},
-        };
+    if (typeof window === "undefined") return EMPTY_MULTI_STORE;
+
+    // 1. Check if multi-goal v3 store exists
+    const rawMulti = localStorage.getItem(multiKey);
+    if (rawMulti) {
+      const parsed = JSON.parse(rawMulti);
+      if (parsed && (parsed.version === 3 || parsed.goals) && typeof parsed.goals === "object") {
+        const goalIds = Object.keys(parsed.goals);
+        if (goalIds.length > 0) {
+          let activeId = parsed.activeGoalId;
+          if (!activeId || !parsed.goals[activeId]) {
+            activeId = goalIds[0];
+          }
+          return {
+            version: 3,
+            activeGoalId: activeId,
+            goals: parsed.goals,
+          };
+        }
       }
     }
-    return EMPTY;
-  } catch {
-    return EMPTY;
+
+    // 2. Migrate legacy v1/v2 single-goal store
+    const rawLegacy = localStorage.getItem(legacyKey);
+    let legacyStore: Partial<Store> = {};
+    if (rawLegacy) {
+      try {
+        legacyStore = JSON.parse(rawLegacy) || {};
+      } catch {}
+    }
+
+    const defaultGoalId = legacyStore.goal?.title
+      ? "goal_" + legacyStore.goal.title.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 20)
+      : "goal_default";
+
+    const defaultGoalTitle = legacyStore.goal?.title || "My Primary Learning Goal";
+    const defaultGoalDesc = legacyStore.goal?.description || "";
+    const defaultGoalDuration = legacyStore.goal?.duration || "Self-Paced";
+    const defaultCreatedAt = legacyStore.goal?.createdAt || new Date().toISOString();
+
+    const rawTasks = Array.isArray(legacyStore.tasks) ? legacyStore.tasks : [];
+    const cleanTasks = rawTasks.filter((t: DailyTask) => t && (t.status as string) !== "archived");
+
+    const defaultGoalStore: GoalStore = {
+      id: defaultGoalId,
+      version: 3,
+      goal: {
+        title: defaultGoalTitle,
+        description: defaultGoalDesc,
+        duration: defaultGoalDuration,
+        createdAt: defaultCreatedAt,
+      },
+      sessions: Array.isArray(legacyStore.sessions) ? legacyStore.sessions : [],
+      tasks: cleanTasks,
+      dailyPlans: legacyStore.dailyPlans && typeof legacyStore.dailyPlans === "object" ? legacyStore.dailyPlans : {},
+      report: legacyStore.report,
+      createdAt: defaultCreatedAt,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const newMultiStore: MultiGoalStore = {
+      version: 3,
+      activeGoalId: defaultGoalId,
+      goals: {
+        [defaultGoalId]: defaultGoalStore,
+      },
+    };
+
+    localStorage.setItem(multiKey, JSON.stringify(newMultiStore));
+    return newMultiStore;
+  } catch (e) {
+    console.error("Error loading multi-goal store:", e);
+    return EMPTY_MULTI_STORE;
   }
 }
 
-export function save(data: Store) {
+export function saveMultiStore(data: MultiGoalStore): void {
+  try {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(multiKey, JSON.stringify(data));
+  } catch (e) {
+    console.error("Error saving multi-goal store:", e);
+  }
+}
+
+export function load(): Store {
+  const multi = loadMultiStore();
+  const active = multi.goals[multi.activeGoalId];
+  if (active) return active;
+  const first = Object.values(multi.goals)[0];
+  return first || EMPTY_GOAL_STORE;
+}
+
+export function save(data: Store): void {
+  const multi = loadMultiStore();
+  const activeId = multi.activeGoalId || data.id || "goal_default";
   const cleanTasks = (data.tasks || []).filter((t) => (t.status as string) !== "archived");
-  // Ensure version is 2 on save
-  const toSave: Store = {
+
+  const updatedGoalStore: GoalStore = {
     ...data,
-    version: 2,
+    id: activeId,
+    version: 3,
     tasks: cleanTasks,
     dailyPlans: data.dailyPlans || {},
+    updatedAt: new Date().toISOString(),
   };
-  localStorage.setItem(key, JSON.stringify(toSave));
+
+  const updatedMulti: MultiGoalStore = {
+    ...multi,
+    activeGoalId: activeId,
+    goals: {
+      ...multi.goals,
+      [activeId]: updatedGoalStore,
+    },
+  };
+
+  saveMultiStore(updatedMulti);
+}
+
+export function createGoal(
+  multi: MultiGoalStore,
+  title: string,
+  description?: string,
+  duration?: string
+): MultiGoalStore {
+  const newId = "goal_" + Date.now();
+  const nowIso = new Date().toISOString();
+
+  const newGoalStore: GoalStore = {
+    id: newId,
+    version: 3,
+    goal: {
+      title: title.trim(),
+      description: description?.trim() || undefined,
+      duration: duration?.trim() || "Self-Paced",
+      createdAt: nowIso,
+    },
+    sessions: [],
+    tasks: [],
+    dailyPlans: {},
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+
+  const updatedMulti: MultiGoalStore = {
+    ...multi,
+    activeGoalId: newId,
+    goals: {
+      ...multi.goals,
+      [newId]: newGoalStore,
+    },
+  };
+
+  saveMultiStore(updatedMulti);
+  return updatedMulti;
+}
+
+export function switchGoal(multi: MultiGoalStore, goalId: string): MultiGoalStore {
+  if (!multi.goals[goalId]) return multi;
+  const updated: MultiGoalStore = {
+    ...multi,
+    activeGoalId: goalId,
+  };
+  saveMultiStore(updated);
+  return updated;
+}
+
+export function renameGoalInStore(
+  multi: MultiGoalStore,
+  goalId: string,
+  title: string,
+  description?: string,
+  duration?: string
+): MultiGoalStore {
+  const target = multi.goals[goalId];
+  if (!target) return multi;
+
+  const currentGoal = target.goal || {
+    title: title.trim(),
+    duration: "Self-Paced",
+    createdAt: new Date().toISOString(),
+  };
+
+  const updatedTarget: GoalStore = {
+    ...target,
+    goal: {
+      ...currentGoal,
+      title: title.trim(),
+      description: description?.trim() || undefined,
+      duration: duration?.trim() || currentGoal.duration || "Self-Paced",
+      createdAt: currentGoal.createdAt || new Date().toISOString(),
+    },
+    updatedAt: new Date().toISOString(),
+  };
+
+  const updatedMulti: MultiGoalStore = {
+    ...multi,
+    goals: {
+      ...multi.goals,
+      [goalId]: updatedTarget,
+    },
+  };
+
+  saveMultiStore(updatedMulti);
+  return updatedMulti;
+}
+
+export function archiveGoalInStore(multi: MultiGoalStore, goalId: string): MultiGoalStore {
+  const target = multi.goals[goalId];
+  if (!target) return multi;
+
+  const isArchived = Boolean(target.archivedAt);
+  const updatedTarget: GoalStore = {
+    ...target,
+    archivedAt: isArchived ? undefined : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  const updatedGoals = {
+    ...multi.goals,
+    [goalId]: updatedTarget,
+  };
+
+  let nextActiveId = multi.activeGoalId;
+  if (!isArchived && multi.activeGoalId === goalId) {
+    const unarchivedIds = Object.keys(updatedGoals).filter((id) => id !== goalId && !updatedGoals[id].archivedAt);
+    if (unarchivedIds.length > 0) {
+      nextActiveId = unarchivedIds[0];
+    }
+  }
+
+  const updatedMulti: MultiGoalStore = {
+    ...multi,
+    activeGoalId: nextActiveId,
+    goals: updatedGoals,
+  };
+
+  saveMultiStore(updatedMulti);
+  return updatedMulti;
+}
+
+export function deleteGoalFromStore(multi: MultiGoalStore, goalId: string): MultiGoalStore {
+  if (Object.keys(multi.goals).length <= 1) return multi;
+
+  const updatedGoals = { ...multi.goals };
+  delete updatedGoals[goalId];
+
+  let nextActiveId = multi.activeGoalId;
+  if (multi.activeGoalId === goalId) {
+    const remainingIds = Object.keys(updatedGoals);
+    const unarchived = remainingIds.filter((id) => !updatedGoals[id].archivedAt);
+    nextActiveId = unarchived.length > 0 ? unarchived[0] : remainingIds[0];
+  }
+
+  const updatedMulti: MultiGoalStore = {
+    ...multi,
+    activeGoalId: nextActiveId,
+    goals: updatedGoals,
+  };
+
+  saveMultiStore(updatedMulti);
+  return updatedMulti;
+}
+
+export function validateImport(value: unknown): value is MultiGoalStore | Store {
+  if (!value || typeof value !== "object") return false;
+  const obj = value as Record<string, unknown>;
+  const isV1 = obj.version === 1 && Array.isArray(obj.sessions);
+  const isV2 = obj.version === 2 && Array.isArray(obj.sessions);
+  const isV3Single = obj.version === 3 && Array.isArray(obj.sessions);
+  const isV3Multi = obj.version === 3 && typeof obj.goals === "object" && obj.goals !== null;
+  return isV1 || isV2 || isV3Single || isV3Multi;
 }
 
 export function localDay(iso: string) {
@@ -204,13 +469,6 @@ export function stats(sessions: Session[]) {
   };
 }
 
-export function validateImport(value: unknown): value is Store {
-  if (!value || typeof value !== "object") return false;
-  const obj = value as Record<string, unknown>;
-  const isV1 = obj.version === 1 && Array.isArray(obj.sessions);
-  const isV2 = obj.version === 2 && Array.isArray(obj.sessions);
-  return isV1 || isV2;
-}
 
 export type CalendarDayInfo = {
   dateStr: string; // "YYYY-MM-DD"

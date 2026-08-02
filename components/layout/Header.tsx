@@ -3,14 +3,18 @@
 import React from "react";
 import { usePomodoro } from "@/components/context/PomodoroContext";
 import ThemeToggle from "./ThemeToggle";
-import { Goal } from "@/lib/data";
+import GoalSelector from "./GoalSelector";
+import { MultiGoalStore } from "@/lib/data";
 
 type Screen = "today" | "plan" | "focus" | "journey" | "insights" | "proof" | "settings";
 
 type HeaderProps = {
   activeScreen: Screen;
   onSelectScreen: (screen: Screen) => void;
-  goal?: Goal;
+  multiStore: MultiGoalStore;
+  onSelectGoal: (goalId: string) => void;
+  onCreateGoal: () => void;
+  onManageGoals: () => void;
   menuOpen: boolean;
   setMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
 };
@@ -18,7 +22,10 @@ type HeaderProps = {
 export default function Header({
   activeScreen,
   onSelectScreen,
-  goal,
+  multiStore,
+  onSelectGoal,
+  onCreateGoal,
+  onManageGoals,
   menuOpen,
   setMenuOpen,
 }: HeaderProps) {
@@ -94,18 +101,13 @@ export default function Header({
       </nav>
 
       <div className="header-utilities">
-        {goal && (
-          <button
-            className="goal-chip"
-            onClick={() => {
-              onSelectScreen("settings");
-              setMenuOpen(false);
-            }}
-            title={goal.title}
-          >
-            {goal.title}
-          </button>
-        )}
+        {/* Goal Selector Dropdown */}
+        <GoalSelector
+          multiStore={multiStore}
+          onSelectGoal={onSelectGoal}
+          onCreateGoal={onCreateGoal}
+          onManageGoals={onManageGoals}
+        />
 
         <ThemeToggle />
       </div>

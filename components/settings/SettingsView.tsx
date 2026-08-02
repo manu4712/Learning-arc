@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef } from "react";
-import { Store, validateImport, EMPTY } from "@/lib/data";
+import { Store, MultiGoalStore, DailyTask, validateImport, EMPTY } from "@/lib/data";
 
 type SettingsViewProps = {
   store: Store;
@@ -18,7 +18,8 @@ export default function SettingsView({ store, onUpdateStore, onEditGoal }: Setti
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `learning-arc-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    const safeTitle = (store.goal?.title || "goal").toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 15);
+    a.download = `learning-arc-${safeTitle}-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -32,9 +33,22 @@ export default function SettingsView({ store, onUpdateStore, onEditGoal }: Setti
         if (!validateImport(parsed)) {
           throw new Error("Invalid schema");
         }
-        if (confirm("Replace your current local journey with this imported backup?")) {
-          const cleanTasks = Array.isArray(parsed.tasks) ? parsed.tasks.filter((t) => (t.status as string) !== "archived") : [];
-          onUpdateStore({ ...parsed, tasks: cleanTasks });
+        if (confirm("Replace active learning arc with this imported backup?")) {
+          if ("goals" in parsed && typeof (parsed as MultiGoalStore).goals === "object") {
+            const multi = parsed as MultiGoalStore;
+            const activeId = multi.activeGoalId || Object.keys(multi.goals)[0];
+            const targetGoal = multi.goals[activeId];
+            if (targetGoal) {
+              const rawTasks = Array.isArray(targetGoal.tasks) ? targetGoal.tasks : [];
+              const cleanTasks = rawTasks.filter((t: DailyTask) => t && t.status !== "archived");
+              onUpdateStore({ ...targetGoal, tasks: cleanTasks });
+            }
+          } else {
+            const singleStore = parsed as Store;
+            const rawTasks = Array.isArray(singleStore.tasks) ? singleStore.tasks : [];
+            const cleanTasks = rawTasks.filter((t: DailyTask) => t && t.status !== "archived");
+            onUpdateStore({ ...singleStore, tasks: cleanTasks });
+          }
         }
       } catch {
         alert("This file is not a valid Learning Arc backup file.");
@@ -44,7 +58,7 @@ export default function SettingsView({ store, onUpdateStore, onEditGoal }: Setti
   };
 
   const handleResetData = () => {
-    if (confirm("Are you sure you want to clear all local Learning Arc data from this browser? This cannot be undone.")) {
+    if (confirm("Are you sure you want to clear data for this active learning goal? This cannot be undone.")) {
       onUpdateStore(EMPTY);
     }
   };
