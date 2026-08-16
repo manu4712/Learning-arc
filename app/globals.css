@@ -3544,48 +3544,60 @@ input[type=number] {
 }
 
 .manage-goals-modal-content {
-  max-width: 600px;
+  max-width: 620px;
+  width: 90%;
+  padding: 28px 32px;
+  border-radius: var(--radius-xl, 20px);
+  background: var(--surface-card, #121614);
+  border: 1px solid var(--line-bright, #333f3a);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
 
 .modal-header-with-action {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.manage-modal-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-top: 4px;
+  letter-spacing: -0.02em;
+}
+
+.modal-create-btn {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
 }
 
 .goals-manage-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: 380px;
+  gap: 14px;
+  max-height: 420px;
   overflow-y: auto;
   margin-bottom: 20px;
+  padding-right: 4px;
 }
 
 .goal-manage-card {
-  border: 1px solid var(--line);
-  background: var(--surface-card);
-  border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  border: 1px solid var(--line-bright, #232d28);
+  background: var(--surface-subtle, #141a17);
+  border-radius: var(--radius-lg, 12px);
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   transition: all 0.15s ease;
 }
 
 .goal-manage-card.active-card {
-  border-color: var(--accent);
+  border-color: var(--accent, #10b981);
   background: rgba(16, 185, 129, 0.04);
-}
-
-.goal-manage-card.archived-card {
-  opacity: 0.6;
-}
-
-.goal-manage-card.danger-state {
-  border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.06);
 }
 
 .goal-title-row {
@@ -3595,34 +3607,27 @@ input[type=number] {
 }
 
 .goal-manage-title {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--ink);
-}
-
-.goal-badge {
-  font-size: 10px;
-  font-weight: 800;
-  padding: 2px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.05em;
+  letter-spacing: -0.01em;
 }
 
 .goal-badge.active {
-  background: var(--accent);
-  color: #000000;
-}
-
-.goal-badge.archived {
-  background: var(--surface-subtle);
-  color: var(--muted);
-  border: 1px solid var(--line-subtle);
+  background: var(--accent, #10b981);
+  color: #052e16;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
 }
 
 .goal-manage-desc {
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--muted);
-  margin: 2px 0 0;
+  line-height: 1.45;
+  margin: 4px 0 0;
 }
 
 .goal-manage-meta {
@@ -3631,51 +3636,112 @@ input[type=number] {
   gap: 8px;
   font-size: 12px;
   color: var(--muted);
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .goal-manage-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
-  border-top: 1px solid var(--line-subtle);
-  padding-top: 10px;
-  margin-top: 4px;
-}
-
-.secondary-sm {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.secondary-sm:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  gap: 14px;
+  border-top: 1px solid var(--line-subtle, #1e2622);
+  padding-top: 12px;
+  margin-top: 2px;
 }
 
 .icon-btn-text {
   border: none;
   background: none;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 4px 0;
+  transition: color 0.15s ease;
 }
 
 .icon-btn-text:hover {
   color: var(--ink);
-  text-decoration: underline;
+}
+
+.icon-btn-text.danger {
+  color: #ef4444;
 }
 
 .icon-btn-text.danger:hover {
-  color: #ef4444;
+  color: #f87171;
+}
+
+/* Subtle, Restrained Delete Confirmation Surface */
+.delete-confirm-card {
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  background: rgba(239, 68, 68, 0.04) !important;
+  border-radius: var(--radius-lg, 12px);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.delete-confirm-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.delete-confirm-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #fca5a5;
+  letter-spacing: -0.01em;
+}
+
+.delete-confirm-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.delete-cancel-btn {
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.delete-action-btn {
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.delete-action-btn:hover {
+  background: #b91c1c;
+}
+
+.manage-goals-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--line-subtle, #232d28);
+  padding-top: 16px;
+}
+
+.manage-close-btn {
+  padding: 8px 18px;
+  font-size: 13px;
 }
 
 /* Onboarding Goal Creation Modal Experience */
@@ -3912,3 +3978,257 @@ input[type=number] {
   font-size: 13.5px;
   font-weight: 700;
 }
+
+/* ==========================================
+   SHARE / MANAGE PUBLIC PROFILE MODAL POLISH
+   ========================================== */
+.share-modal-container {
+  max-width: 580px;
+  width: 90%;
+  padding: 32px 36px;
+  border-radius: var(--radius-xl, 20px);
+  background: var(--surface-card, #121614);
+  border: 1px solid var(--line-bright, #333f3a);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.share-modal-header {
+  margin-bottom: 20px;
+}
+
+.share-modal-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  margin-top: 4px;
+  letter-spacing: -0.02em;
+}
+
+.share-intro-desc {
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.share-privacy-box {
+  background: var(--surface-subtle, #141a17);
+  border: 1px solid var(--line-subtle, #232d28);
+  border-radius: var(--radius-md, 10px);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.privacy-heading {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.privacy-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.share-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.share-field-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.share-text-input {
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
+.share-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-subtle, #232d28);
+}
+
+.share-btn {
+  padding: 9px 18px;
+  font-size: 13.5px;
+}
+
+.share-manage-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.share-live-status-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.live-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent, #10b981);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+  flex-shrink: 0;
+}
+
+.live-status-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent, #10b981);
+}
+
+.share-url-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-url-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.share-url-field {
+  flex: 1;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  font-family: "JetBrains Mono", monospace;
+  background: var(--surface, #0d110f);
+  border: 1px solid var(--line-bright, #333f3a);
+  border-radius: 8px;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-url-field:focus {
+  border-color: var(--accent, #10b981);
+  outline: none;
+}
+
+.share-copy-btn {
+  min-width: 100px;
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--accent, #10b981);
+  color: #052e16;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.share-copy-btn:hover {
+  background: var(--accent-hover, #34d399);
+}
+
+.share-copy-btn.copied {
+  background: #059669;
+  color: #ffffff;
+}
+
+.share-manage-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 18px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line-subtle, #232d28);
+  flex-wrap: wrap;
+}
+
+.share-primary-actions-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.share-action-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.share-unpublish-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.share-unpublish-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+}
+
+.share-unpublish-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 540px) {
+  .share-url-input-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .share-copy-btn {
+    width: 100%;
+  }
+  .share-manage-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .share-primary-actions-group {
+    flex-direction: column;
+    width: 100%;
+  }
+  .share-primary-actions-group > * {
+    width: 100%;
+    text-align: center;
+  }
+  .share-unpublish-btn {
+    text-align: center;
+    width: 100%;
+  }
+}
+

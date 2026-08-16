@@ -193,6 +193,7 @@ export default function PomodoroView({ goal, onCompleteSession, targetTask }: Po
           const activeTaskId = state.taskId || targetTask?.id;
           const sessionWithTask: Session = {
             ...session,
+            goalId: state.goalId || undefined,
             taskId: activeTaskId,
           };
           finishReflection();

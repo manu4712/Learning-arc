@@ -1,24 +1,33 @@
 "use client";
 
 import React, { useRef } from "react";
-import { Store, MultiGoalStore, DailyTask, validateImport, EMPTY } from "@/lib/data";
+import { Store, MultiGoalStore, normalizeMultiStore, validateImport, EMPTY } from "@/lib/data";
 
 type SettingsViewProps = {
   store: Store;
+  multiStore?: MultiGoalStore;
   onUpdateStore: (patch: Partial<Store>) => void;
+  onRestoreMultiStore?: (restored: MultiGoalStore) => void;
   onEditGoal: () => void;
 };
 
-export default function SettingsView({ store, onUpdateStore, onEditGoal }: SettingsViewProps) {
+export default function SettingsView({
+  store,
+  multiStore,
+  onUpdateStore,
+  onRestoreMultiStore,
+  onEditGoal,
+}: SettingsViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
-    const jsonStr = JSON.stringify(store, null, 2);
+    const dataToExport = multiStore || store;
+    const jsonStr = JSON.stringify(dataToExport, null, 2);
     const blob = new Blob([jsonStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const safeTitle = (store.goal?.title || "goal").toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 15);
+    const safeTitle = (store.goal?.title || "backup").toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 15);
     a.download = `learning-arc-${safeTitle}-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
@@ -33,21 +42,16 @@ export default function SettingsView({ store, onUpdateStore, onEditGoal }: Setti
         if (!validateImport(parsed)) {
           throw new Error("Invalid schema");
         }
-        if (confirm("Replace active learning arc with this imported backup?")) {
-          if ("goals" in parsed && typeof (parsed as MultiGoalStore).goals === "object") {
-            const multi = parsed as MultiGoalStore;
-            const activeId = multi.activeGoalId || Object.keys(multi.goals)[0];
-            const targetGoal = multi.goals[activeId];
-            if (targetGoal) {
-              const rawTasks = Array.isArray(targetGoal.tasks) ? targetGoal.tasks : [];
-              const cleanTasks = rawTasks.filter((t: DailyTask) => t && t.status !== "archived");
-              onUpdateStore({ ...targetGoal, tasks: cleanTasks });
-            }
+        if (confirm("Restore Learning Arc from this backup file?")) {
+          const normalized = normalizeMultiStore(parsed);
+          if (onRestoreMultiStore) {
+            onRestoreMultiStore(normalized);
           } else {
-            const singleStore = parsed as Store;
-            const rawTasks = Array.isArray(singleStore.tasks) ? singleStore.tasks : [];
-            const cleanTasks = rawTasks.filter((t: DailyTask) => t && t.status !== "archived");
-            onUpdateStore({ ...singleStore, tasks: cleanTasks });
+            const activeId = normalized.activeGoalId || Object.keys(normalized.goals)[0];
+            const targetGoal = normalized.goals[activeId];
+            if (targetGoal) {
+              onUpdateStore(targetGoal);
+            }
           }
         }
       } catch {

@@ -31,6 +31,7 @@ export type Analysis = {
 
 export type Session = {
   id: string;
+  goalId?: string;
   startedAt: string;
   completedAt: string;
   duration: number;
@@ -51,6 +52,7 @@ export type TaskPriority = "high" | "medium" | "normal";
 
 export type DailyTask = {
   id: string;
+  goalId?: string;
   date: string; // current scheduled local YYYY-MM-DD
   originalPlannedDate?: string; // original planned local YYYY-MM-DD
   title: string;
@@ -139,6 +141,285 @@ export const EMPTY: Store = EMPTY_GOAL_STORE;
 const multiKey = "learning-arc-multi-v3";
 const legacyKey = "learning-arc-v1";
 
+/**
+ * Normalizes any raw, legacy, imported, or partially corrupted multi-goal or single-goal
+ * payload into a canonical, self-healed MultiGoalStore.
+ * 
+ * Guarantees:
+ * 1. Every goal is stored under key === goal.id.
+ * 2. Every goal has a valid, non-empty, unique ID string.
+ * 3. Every session and task inside a goal has its goalId stamped matching goal.id.
+ * 4. Obsolete/legacy archive state is stripped cleanly.
+ * 5. Minimum 1 goal is strictly enforced (creates a valid default if empty).
+ * 6. activeGoalId is strictly validated against available goal keys.
+ */
+export function normalizeMultiStore(data: unknown): MultiGoalStore {
+  const nowIso = new Date().toISOString();
+  const normalizedGoals: Record<string, GoalStore> = {};
+  let targetActiveId: string | undefined = undefined;
+
+  if (data && typeof data === "object") {
+    const raw = data as Record<string, unknown>;
+
+    // 1. Check if activeGoalId was specified
+    if (typeof raw.activeGoalId === "string" && raw.activeGoalId.trim()) {
+      targetActiveId = raw.activeGoalId.trim();
+    }
+
+    // 2. Extract raw goal list from whatever format it arrived in
+    let rawGoalsList: Array<{ key?: string; store: Record<string, unknown> }> = [];
+
+    if (raw.goals && typeof raw.goals === "object") {
+      if (Array.isArray(raw.goals)) {
+        // If goals was serialized as an array
+        rawGoalsList = raw.goals
+          .filter((g) => g && typeof g === "object")
+          .map((g, idx) => ({
+            key: typeof g.id === "string" && g.id.trim() ? g.id.trim() : `goal_${idx + 1}`,
+            store: g as Record<string, unknown>,
+          }));
+      } else {
+        // Standard object map
+        const rawGoalsObj = raw.goals as Record<string, unknown>;
+        rawGoalsList = Object.entries(rawGoalsObj)
+          .filter(([, g]) => g && typeof g === "object")
+          .map(([k, g]) => ({
+            key: k,
+            store: g as Record<string, unknown>,
+          }));
+      }
+    } else if (Array.isArray(raw.sessions) || raw.goal || raw.tasks) {
+      // Single-goal store (legacy v1/v2 or single-goal v3)
+      const singleId =
+        typeof raw.id === "string" && raw.id.trim() && raw.id !== "goal_default"
+          ? raw.id.trim()
+          : "goal_" + Date.now();
+      rawGoalsList = [{ key: singleId, store: raw }];
+    }
+
+    // 3. Normalize each goal store into normalizedGoals
+    const usedIds = new Set<string>();
+
+    for (let i = 0; i < rawGoalsList.length; i++) {
+      const entry = rawGoalsList[i];
+      const s = entry.store;
+
+      // Determine canonical ID
+      let canonicalId = "";
+      if (typeof s.id === "string" && s.id.trim() && s.id.trim() !== "goal_default" && s.id.trim() !== "default") {
+        canonicalId = s.id.trim();
+      } else if (entry.key && entry.key.trim() && entry.key.trim() !== "goal_default" && entry.key.trim() !== "default") {
+        canonicalId = entry.key.trim();
+      } else {
+        canonicalId = `goal_${Date.now()}_${i}`;
+      }
+
+      // Ensure uniqueness
+      let uniqueId = canonicalId;
+      let counter = 1;
+      while (usedIds.has(uniqueId)) {
+        uniqueId = `${canonicalId}_${counter}`;
+        counter++;
+      }
+      usedIds.add(uniqueId);
+
+      // Normalize Goal metadata
+      let rawGoalObj: Record<string, unknown> = {};
+      if (s.goal && typeof s.goal === "object") {
+        rawGoalObj = s.goal as Record<string, unknown>;
+      }
+
+      const rawTitle =
+        typeof rawGoalObj.title === "string"
+          ? rawGoalObj.title
+          : typeof s.title === "string"
+          ? s.title
+          : "";
+      const cleanTitle = rawTitle.trim() || `Learning Goal ${i + 1}`;
+
+      const rawDesc =
+        typeof rawGoalObj.description === "string"
+          ? rawGoalObj.description
+          : typeof s.description === "string"
+          ? s.description
+          : undefined;
+      const cleanDesc = rawDesc?.trim() || undefined;
+
+      const rawDuration =
+        typeof rawGoalObj.duration === "string"
+          ? rawGoalObj.duration
+          : typeof s.duration === "string"
+          ? s.duration
+          : "Self-Paced";
+      const cleanDuration = rawDuration.trim() || "Self-Paced";
+
+      const goalCreatedAt =
+        typeof rawGoalObj.createdAt === "string" && rawGoalObj.createdAt.trim()
+          ? rawGoalObj.createdAt
+          : typeof s.createdAt === "string" && s.createdAt.trim()
+          ? s.createdAt
+          : nowIso;
+
+      const goalObject: Goal = {
+        title: cleanTitle,
+        description: cleanDesc,
+        duration: cleanDuration,
+        createdAt: goalCreatedAt,
+      };
+
+      // Normalize Sessions
+      const rawSessions = Array.isArray(s.sessions) ? s.sessions : [];
+      const cleanSessions: Session[] = rawSessions
+        .filter((sess) => sess && typeof sess === "object")
+        .map((sess: Record<string, unknown>) => ({
+          ...(sess as unknown as Session),
+          goalId: uniqueId,
+        }));
+
+      // Normalize Tasks
+      const rawTasks = Array.isArray(s.tasks) ? s.tasks : [];
+      const cleanTasks: DailyTask[] = rawTasks
+        .filter((t) => t && typeof t === "object")
+        .map((t: Record<string, unknown>) => ({
+          ...(t as unknown as DailyTask),
+          goalId: uniqueId,
+        }));
+
+      // Normalize Daily Plans
+      const cleanPlans: Record<string, DailyPlan> =
+        s.dailyPlans && typeof s.dailyPlans === "object" && !Array.isArray(s.dailyPlans)
+          ? (s.dailyPlans as Record<string, DailyPlan>)
+          : {};
+
+      // Normalize Public Profile
+      let cleanPublicProfile: PublicProfileInfo | undefined = undefined;
+      if (s.publicProfile && typeof s.publicProfile === "object") {
+        const pp = s.publicProfile as Record<string, unknown>;
+        if (typeof pp.id === "string" && typeof pp.publicUrl === "string") {
+          cleanPublicProfile = {
+            id: pp.id,
+            managementToken: typeof pp.managementToken === "string" ? pp.managementToken : "",
+            publicUrl: pp.publicUrl,
+            updatedAt: typeof pp.updatedAt === "string" ? pp.updatedAt : nowIso,
+          };
+        }
+      }
+
+      const normalizedGoalStore: GoalStore = {
+        id: uniqueId,
+        version: 3,
+        goal: goalObject,
+        sessions: cleanSessions,
+        tasks: cleanTasks,
+        dailyPlans: cleanPlans,
+        report: s.report && typeof s.report === "object" ? (s.report as Report) : undefined,
+        publicProfile: cleanPublicProfile,
+        createdAt: typeof s.createdAt === "string" && s.createdAt.trim() ? s.createdAt : goalCreatedAt,
+        updatedAt: typeof s.updatedAt === "string" && s.updatedAt.trim() ? s.updatedAt : nowIso,
+      };
+
+      normalizedGoals[uniqueId] = normalizedGoalStore;
+    }
+  }
+
+  // 4. Enforce Minimum 1 Goal requirement
+  const goalIds = Object.keys(normalizedGoals);
+  if (goalIds.length === 0) {
+    const defaultId = "goal_" + Date.now();
+    normalizedGoals[defaultId] = {
+      id: defaultId,
+      version: 3,
+      goal: {
+        title: "My Primary Learning Goal",
+        duration: "Self-Paced",
+        createdAt: nowIso,
+      },
+      sessions: [],
+      tasks: [],
+      dailyPlans: {},
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+  }
+
+  // 5. Strictly validate activeGoalId
+  const finalGoalIds = Object.keys(normalizedGoals);
+  const finalActiveId =
+    targetActiveId && normalizedGoals[targetActiveId] ? targetActiveId : finalGoalIds[0];
+
+  return {
+    version: 3,
+    activeGoalId: finalActiveId,
+    goals: normalizedGoals,
+  };
+}
+
+/**
+ * Safely merges an imported MultiGoalStore into the current one.
+ * - New goals are added.
+ * - Existing goals are preserved. Sessions, tasks, and daily plans are merged by ID/Date.
+ * - Current activeGoalId is preserved.
+ */
+export function mergeMultiStore(current: MultiGoalStore, imported: MultiGoalStore): MultiGoalStore {
+  const currentNorm = normalizeMultiStore(current);
+  const importedNorm = normalizeMultiStore(imported);
+
+  const mergedGoals: Record<string, GoalStore> = { ...currentNorm.goals };
+
+  for (const [goalId, importedGoal] of Object.entries(importedNorm.goals)) {
+    if (!mergedGoals[goalId]) {
+      mergedGoals[goalId] = importedGoal;
+    } else {
+      const existing = mergedGoals[goalId];
+
+      const sessionMap = new Map<string, Session>();
+      existing.sessions.forEach(s => sessionMap.set(s.id, s));
+      importedGoal.sessions.forEach(s => {
+        if (!sessionMap.has(s.id)) sessionMap.set(s.id, s);
+      });
+      const mergedSessions = Array.from(sessionMap.values());
+
+      const taskMap = new Map<string, DailyTask>();
+      (existing.tasks || []).forEach(t => taskMap.set(t.id, t));
+      (importedGoal.tasks || []).forEach(t => {
+        if (!taskMap.has(t.id)) taskMap.set(t.id, t);
+      });
+      const mergedTasks = Array.from(taskMap.values());
+
+      const mergedPlans = { ...(importedGoal.dailyPlans || {}), ...(existing.dailyPlans || {}) };
+
+      mergedGoals[goalId] = {
+        ...existing,
+        goal: existing.goal && importedGoal.goal
+          ? {
+              title: existing.goal.title || importedGoal.goal.title,
+              description: existing.goal.description || importedGoal.goal.description,
+              duration: existing.goal.duration || importedGoal.goal.duration,
+              createdAt: existing.goal.createdAt || importedGoal.goal.createdAt
+            }
+          : (existing.goal || importedGoal.goal),
+        sessions: mergedSessions,
+        tasks: mergedTasks,
+        dailyPlans: mergedPlans,
+        publicProfile: existing.publicProfile || importedGoal.publicProfile,
+        report: existing.report || importedGoal.report,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+  }
+
+  let activeId = currentNorm.activeGoalId;
+  if (!mergedGoals[activeId]) {
+    activeId = Object.keys(mergedGoals)[0];
+  }
+
+  return {
+    version: 3,
+    activeGoalId: activeId,
+    goals: mergedGoals,
+  };
+}
+
 export function loadMultiStore(): MultiGoalStore {
   try {
     if (typeof window === "undefined") return EMPTY_MULTI_STORE;
@@ -147,19 +428,29 @@ export function loadMultiStore(): MultiGoalStore {
     const rawMulti = localStorage.getItem(multiKey);
     if (rawMulti) {
       const parsed = JSON.parse(rawMulti);
-      if (parsed && (parsed.version === 3 || parsed.goals) && typeof parsed.goals === "object") {
-        const goalIds = Object.keys(parsed.goals);
-        if (goalIds.length > 0) {
-          let activeId = parsed.activeGoalId;
-          if (!activeId || !parsed.goals[activeId]) {
-            activeId = goalIds[0];
-          }
-          return {
-            version: 3,
-            activeGoalId: activeId,
-            goals: parsed.goals,
-          };
+      if (parsed && typeof parsed === "object") {
+        const normalized = normalizeMultiStore(parsed);
+
+        // One-time check if legacy global public profile exists to migrate
+        const rawLegacyProfile = localStorage.getItem("learning-arc-public-profile-v1");
+        if (rawLegacyProfile) {
+          try {
+            const legacyProf = JSON.parse(rawLegacyProfile);
+            if (
+              legacyProf &&
+              legacyProf.id &&
+              legacyProf.publicUrl &&
+              !normalized.goals[normalized.activeGoalId]?.publicProfile
+            ) {
+              normalized.goals[normalized.activeGoalId].publicProfile = legacyProf;
+            }
+            localStorage.removeItem("learning-arc-public-profile-v1");
+          } catch {}
         }
+
+        // Persist normalized structure
+        localStorage.setItem(multiKey, JSON.stringify(normalized));
+        return normalized;
       }
     }
 
@@ -172,45 +463,25 @@ export function loadMultiStore(): MultiGoalStore {
       } catch {}
     }
 
-    const defaultGoalId = legacyStore.goal?.title
-      ? "goal_" + legacyStore.goal.title.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 20)
-      : "goal_default";
+    // Legacy public profile check
+    let legacyPublicProfile: PublicProfileInfo | undefined = legacyStore.publicProfile;
+    if (!legacyPublicProfile) {
+      const rawLegacyProf = localStorage.getItem("learning-arc-public-profile-v1");
+      if (rawLegacyProf) {
+        try {
+          legacyPublicProfile = JSON.parse(rawLegacyProf);
+          localStorage.removeItem("learning-arc-public-profile-v1");
+        } catch {}
+      }
+    }
 
-    const defaultGoalTitle = legacyStore.goal?.title || "My Primary Learning Goal";
-    const defaultGoalDesc = legacyStore.goal?.description || "";
-    const defaultGoalDuration = legacyStore.goal?.duration || "Self-Paced";
-    const defaultCreatedAt = legacyStore.goal?.createdAt || new Date().toISOString();
+    const migrated = normalizeMultiStore({
+      ...legacyStore,
+      publicProfile: legacyPublicProfile,
+    });
 
-    const rawTasks = Array.isArray(legacyStore.tasks) ? legacyStore.tasks : [];
-    const cleanTasks = rawTasks.filter((t: DailyTask) => t && (t.status as string) !== "archived");
-
-    const defaultGoalStore: GoalStore = {
-      id: defaultGoalId,
-      version: 3,
-      goal: {
-        title: defaultGoalTitle,
-        description: defaultGoalDesc,
-        duration: defaultGoalDuration,
-        createdAt: defaultCreatedAt,
-      },
-      sessions: Array.isArray(legacyStore.sessions) ? legacyStore.sessions : [],
-      tasks: cleanTasks,
-      dailyPlans: legacyStore.dailyPlans && typeof legacyStore.dailyPlans === "object" ? legacyStore.dailyPlans : {},
-      report: legacyStore.report,
-      createdAt: defaultCreatedAt,
-      updatedAt: new Date().toISOString(),
-    };
-
-    const newMultiStore: MultiGoalStore = {
-      version: 3,
-      activeGoalId: defaultGoalId,
-      goals: {
-        [defaultGoalId]: defaultGoalStore,
-      },
-    };
-
-    localStorage.setItem(multiKey, JSON.stringify(newMultiStore));
-    return newMultiStore;
+    localStorage.setItem(multiKey, JSON.stringify(migrated));
+    return migrated;
   } catch (e) {
     console.error("Error loading multi-goal store:", e);
     return EMPTY_MULTI_STORE;
@@ -220,7 +491,8 @@ export function loadMultiStore(): MultiGoalStore {
 export function saveMultiStore(data: MultiGoalStore): void {
   try {
     if (typeof window === "undefined") return;
-    localStorage.setItem(multiKey, JSON.stringify(data));
+    const normalized = normalizeMultiStore(data);
+    localStorage.setItem(multiKey, JSON.stringify(normalized));
   } catch (e) {
     console.error("Error saving multi-goal store:", e);
   }
@@ -266,6 +538,7 @@ export function createGoal(
   description?: string,
   duration?: string
 ): MultiGoalStore {
+  const normalized = normalizeMultiStore(multi);
   const newId = "goal_" + Date.now();
   const nowIso = new Date().toISOString();
 
@@ -273,7 +546,7 @@ export function createGoal(
     id: newId,
     version: 3,
     goal: {
-      title: title.trim(),
+      title: title.trim() || "New Learning Goal",
       description: description?.trim() || undefined,
       duration: duration?.trim() || "Self-Paced",
       createdAt: nowIso,
@@ -286,10 +559,10 @@ export function createGoal(
   };
 
   const updatedMulti: MultiGoalStore = {
-    ...multi,
+    version: 3,
     activeGoalId: newId,
     goals: {
-      ...multi.goals,
+      ...normalized.goals,
       [newId]: newGoalStore,
     },
   };
@@ -299,9 +572,11 @@ export function createGoal(
 }
 
 export function switchGoal(multi: MultiGoalStore, goalId: string): MultiGoalStore {
-  if (!multi.goals[goalId]) return multi;
+  const normalized = normalizeMultiStore(multi);
+  if (!normalized.goals[goalId]) return normalized;
+
   const updated: MultiGoalStore = {
-    ...multi,
+    ...normalized,
     activeGoalId: goalId,
   };
   saveMultiStore(updated);
@@ -315,8 +590,9 @@ export function renameGoalInStore(
   description?: string,
   duration?: string
 ): MultiGoalStore {
-  const target = multi.goals[goalId];
-  if (!target) return multi;
+  const normalized = normalizeMultiStore(multi);
+  const target = normalized.goals[goalId];
+  if (!target) return normalized;
 
   const currentGoal = target.goal || {
     title: title.trim(),
@@ -326,10 +602,11 @@ export function renameGoalInStore(
 
   const updatedTarget: GoalStore = {
     ...target,
+    id: goalId, // PRESERVE CANONICAL ID IMMUTABLY
     goal: {
       ...currentGoal,
-      title: title.trim(),
-      description: description?.trim() || undefined,
+      title: title.trim() || currentGoal.title,
+      description: description !== undefined ? (description.trim() || undefined) : currentGoal.description,
       duration: duration?.trim() || currentGoal.duration || "Self-Paced",
       createdAt: currentGoal.createdAt || new Date().toISOString(),
     },
@@ -337,9 +614,9 @@ export function renameGoalInStore(
   };
 
   const updatedMulti: MultiGoalStore = {
-    ...multi,
+    ...normalized,
     goals: {
-      ...multi.goals,
+      ...normalized.goals,
       [goalId]: updatedTarget,
     },
   };
@@ -348,55 +625,25 @@ export function renameGoalInStore(
   return updatedMulti;
 }
 
-export function archiveGoalInStore(multi: MultiGoalStore, goalId: string): MultiGoalStore {
-  const target = multi.goals[goalId];
-  if (!target) return multi;
-
-  const isArchived = Boolean(target.archivedAt);
-  const updatedTarget: GoalStore = {
-    ...target,
-    archivedAt: isArchived ? undefined : new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  const updatedGoals = {
-    ...multi.goals,
-    [goalId]: updatedTarget,
-  };
-
-  let nextActiveId = multi.activeGoalId;
-  if (!isArchived && multi.activeGoalId === goalId) {
-    const unarchivedIds = Object.keys(updatedGoals).filter((id) => id !== goalId && !updatedGoals[id].archivedAt);
-    if (unarchivedIds.length > 0) {
-      nextActiveId = unarchivedIds[0];
-    }
+export function deleteGoalFromStore(multi: MultiGoalStore, goalId: string): MultiGoalStore {
+  const normalized = normalizeMultiStore(multi);
+  const goalIds = Object.keys(normalized.goals);
+  if (goalIds.length <= 1) {
+    // Cannot delete the final remaining goal
+    return normalized;
   }
 
-  const updatedMulti: MultiGoalStore = {
-    ...multi,
-    activeGoalId: nextActiveId,
-    goals: updatedGoals,
-  };
-
-  saveMultiStore(updatedMulti);
-  return updatedMulti;
-}
-
-export function deleteGoalFromStore(multi: MultiGoalStore, goalId: string): MultiGoalStore {
-  if (Object.keys(multi.goals).length <= 1) return multi;
-
-  const updatedGoals = { ...multi.goals };
+  const updatedGoals = { ...normalized.goals };
   delete updatedGoals[goalId];
 
-  let nextActiveId = multi.activeGoalId;
-  if (multi.activeGoalId === goalId) {
-    const remainingIds = Object.keys(updatedGoals);
-    const unarchived = remainingIds.filter((id) => !updatedGoals[id].archivedAt);
-    nextActiveId = unarchived.length > 0 ? unarchived[0] : remainingIds[0];
+  const remainingIds = Object.keys(updatedGoals);
+  let nextActiveId = normalized.activeGoalId;
+  if (normalized.activeGoalId === goalId) {
+    nextActiveId = remainingIds[0];
   }
 
   const updatedMulti: MultiGoalStore = {
-    ...multi,
+    version: 3,
     activeGoalId: nextActiveId,
     goals: updatedGoals,
   };

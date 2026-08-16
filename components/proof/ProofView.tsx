@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import ShareModal from "./ShareModal";
 import { Goal, Store, stats as calculateStats, minutes } from "@/lib/data";
 
@@ -8,34 +8,18 @@ type ProofViewProps = {
   goal: Goal;
   store: Store;
   st: ReturnType<typeof calculateStats>;
+  onUpdateStore: (patch: Partial<Store>) => void;
 };
 
-type LocalShareData = {
-  id: string;
-  managementToken: string;
-  publicUrl: string;
-  updatedAt: string;
-};
-
-const LOCAL_SHARE_KEY = "learning-arc-public-profile-v1";
-
-export default function ProofView({ goal, store, st }: ProofViewProps) {
+export default function ProofView({ goal, store, st, onUpdateStore }: ProofViewProps) {
   const [shareModalOpen, setShareModalOpen] = useState(false);
-  const [localShare, setLocalShare] = useState<LocalShareData | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LOCAL_SHARE_KEY);
-      if (raw) {
-        setLocalShare(JSON.parse(raw));
-      }
-    } catch {}
-  }, [shareModalOpen]);
+  const publicProfile = store.publicProfile;
 
   const copyLink = () => {
-    if (!localShare) return;
-    const fullUrl = `${window.location.origin}${localShare.publicUrl}`;
+    if (!publicProfile) return;
+    const fullUrl = `${window.location.origin}${publicProfile.publicUrl}`;
     navigator.clipboard.writeText(fullUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -57,12 +41,12 @@ export default function ProofView({ goal, store, st }: ProofViewProps) {
 
       {/* Share Management Panel */}
       <section className="panel share-status-panel">
-        {localShare ? (
+        {publicProfile ? (
           <div className="share-status-published">
             <div className="status-badge-row">
               <span className="status-pill published">● JOURNEY PUBLISHED & LIVE</span>
               <span className="last-updated-text">
-                Last updated {new Date(localShare.updatedAt).toLocaleDateString()}
+                Last updated {new Date(publicProfile.updatedAt).toLocaleDateString()}
               </span>
             </div>
 
@@ -70,7 +54,7 @@ export default function ProofView({ goal, store, st }: ProofViewProps) {
               <input
                 type="text"
                 readOnly
-                value={`${typeof window !== "undefined" ? window.location.origin : ""}${localShare.publicUrl}`}
+                value={`${typeof window !== "undefined" ? window.location.origin : ""}${publicProfile.publicUrl}`}
               />
               <button type="button" className="primary" onClick={copyLink}>
                 {copied ? "Copied!" : "Copy Link"}
@@ -79,7 +63,7 @@ export default function ProofView({ goal, store, st }: ProofViewProps) {
 
             <div className="share-action-buttons">
               <a
-                href={localShare.publicUrl}
+                href={publicProfile.publicUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="secondary button-link"
@@ -157,7 +141,11 @@ export default function ProofView({ goal, store, st }: ProofViewProps) {
       </article>
 
       {shareModalOpen && (
-        <ShareModal store={store} onClose={() => setShareModalOpen(false)} />
+        <ShareModal
+          store={store}
+          onUpdateStore={onUpdateStore}
+          onClose={() => setShareModalOpen(false)}
+        />
       )}
     </div>
   );

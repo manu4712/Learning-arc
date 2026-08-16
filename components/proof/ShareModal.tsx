@@ -1,37 +1,20 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Store } from "@/lib/data";
+import React, { useState } from "react";
+import { Store, PublicProfileInfo } from "@/lib/data";
 
 type ShareModalProps = {
   store: Store;
+  onUpdateStore: (patch: Partial<Store>) => void;
   onClose: () => void;
 };
 
-type LocalShareData = {
-  id: string;
-  managementToken: string;
-  publicUrl: string;
-  updatedAt: string;
-};
-
-const LOCAL_SHARE_KEY = "learning-arc-public-profile-v1";
-
-export default function ShareModal({ store, onClose }: ShareModalProps) {
-  const [localShare, setLocalShare] = useState<LocalShareData | null>(null);
+export default function ShareModal({ store, onUpdateStore, onClose }: ShareModalProps) {
+  const publicProfile = store.publicProfile;
   const [displayName, setDisplayName] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LOCAL_SHARE_KEY);
-      if (raw) {
-        setLocalShare(JSON.parse(raw));
-      }
-    } catch {}
-  }, []);
 
   const handlePublish = async (isUpdate = false) => {
     setBusy(true);
@@ -42,8 +25,8 @@ export default function ShareModal({ store, onClose }: ShareModalProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: isUpdate ? localShare?.id : undefined,
-          managementToken: isUpdate ? localShare?.managementToken : undefined,
+          id: isUpdate ? publicProfile?.id : undefined,
+          managementToken: isUpdate ? publicProfile?.managementToken : undefined,
           displayName: displayName.trim() || undefined,
           store,
         }),
@@ -55,15 +38,14 @@ export default function ShareModal({ store, onClose }: ShareModalProps) {
       }
 
       const data = await res.json();
-      const updatedLocal: LocalShareData = {
+      const updatedProfile: PublicProfileInfo = {
         id: data.id,
         managementToken: data.managementToken,
         publicUrl: data.publicUrl,
         updatedAt: new Date().toISOString(),
       };
 
-      localStorage.setItem(LOCAL_SHARE_KEY, JSON.stringify(updatedLocal));
-      setLocalShare(updatedLocal);
+      onUpdateStore({ publicProfile: updatedProfile });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Publication failed. Try again.");
     } finally {
@@ -72,8 +54,12 @@ export default function ShareModal({ store, onClose }: ShareModalProps) {
   };
 
   const handleUnpublish = async () => {
-    if (!localShare) return;
-    if (!confirm("Are you sure you want to unpublish your Learning Journey? The public link will stop working immediately.")) {
+    if (!publicProfile) return;
+    if (
+      !confirm(
+        "Are you sure you want to unpublish your Learning Journey? The public link will stop working immediately."
+      )
+    ) {
       return;
     }
 
@@ -85,8 +71,8 @@ export default function ShareModal({ store, onClose }: ShareModalProps) {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: localShare.id,
-          managementToken: localShare.managementToken,
+          id: publicProfile.id,
+          managementToken: publicProfile.managementToken,
         }),
       });
 
@@ -95,8 +81,7 @@ export default function ShareModal({ store, onClose }: ShareModalProps) {
         throw new Error(data.error || "Failed to unpublish.");
       }
 
-      localStorage.removeItem(LOCAL_SHARE_KEY);
-      setLocalShare(null);
+      onUpdateStore({ publicProfile: undefined });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unpublish failed.");
     } finally {
@@ -105,8 +90,8 @@ export default function ShareModal({ store, onClose }: ShareModalProps) {
   };
 
   const copyLink = () => {
-    if (!localShare) return;
-    const fullUrl = `${window.location.origin}${localShare.publicUrl}`;
+    if (!publicProfile) return;
+    const fullUrl = `${window.location.origin}${publicProfile.publicUrl}`;
     navigator.clipboard.writeText(fullUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -114,85 +99,120 @@ export default function ShareModal({ store, onClose }: ShareModalProps) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content share-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content share-modal-container" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose} aria-label="Close modal">
           ×
         </button>
 
-        <span className="eyebrow">SHAREABLE PROOF OF LEARNING</span>
-        <h2>{localShare ? "Manage Public Profile" : "Publish Learning Journey"}</h2>
+        <div className="share-modal-header">
+          <span className="eyebrow tag-interpreted">SHAREABLE PROOF OF LEARNING</span>
+          <h2 className="share-modal-title">
+            {publicProfile ? "Manage Public Profile" : "Publish Learning Journey"}
+          </h2>
+        </div>
 
-        {!localShare ? (
-          <div className="share-intro">
-            <p>
+        {!publicProfile ? (
+          <div className="share-intro-flow">
+            <p className="share-intro-desc">
               Publishing creates a <strong>read-only public profile link</strong> that presents your recorded focus time, reflections, streaks, and skill signals.
             </p>
-            <div className="privacy-callout">
-              <strong>🔒 Privacy First:</strong>
-              <ul>
+
+            <div className="share-privacy-box">
+              <strong className="privacy-heading">🔒 Privacy First</strong>
+              <ul className="privacy-list">
                 <li>Your private API keys and tokens are <strong>never</strong> shared.</li>
                 <li>Visitors cannot edit, modify, or delete your learning sessions.</li>
-                <li>You can update or unpublish your profile at any time from this device.</li>
+                <li>You can update or unpublish this goal profile at any time.</li>
               </ul>
             </div>
 
-            <label className="input-field">
-              Learner Display Name <small>(optional)</small>
+            <div className="share-field-group">
+              <label htmlFor="learner-name-input" className="share-field-label">
+                Learner Display Name <span className="optional-tag">(optional)</span>
+              </label>
               <input
+                id="learner-name-input"
                 type="text"
                 maxLength={60}
+                className="text-input share-text-input"
                 placeholder="e.g. Alex M."
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
               />
-            </label>
+            </div>
 
-            {error && <p className="notice danger">{error}</p>}
+            {error && <div className="form-error-banner">{error}</div>}
 
-            <div className="modal-actions">
-              <button className="primary" onClick={() => handlePublish(false)} disabled={busy}>
-                {busy ? "Publishing snapshot…" : "Publish My Learning Journey →"}
-              </button>
-              <button className="secondary" onClick={onClose}>
+            <div className="share-modal-actions">
+              <button className="secondary share-btn" onClick={onClose}>
                 Cancel
+              </button>
+              <button
+                className="primary share-btn"
+                onClick={() => handlePublish(false)}
+                disabled={busy}
+              >
+                {busy ? "Publishing snapshot…" : "Publish Learning Journey →"}
               </button>
             </div>
           </div>
         ) : (
-          <div className="share-active">
-            <p className="notice success">
-              ✓ Your Learning Journey is published and live!
-            </p>
-
-            <div className="public-url-box">
-              <input
-                type="text"
-                readOnly
-                value={`${typeof window !== "undefined" ? window.location.origin : ""}${localShare.publicUrl}`}
-              />
-              <button className="primary" onClick={copyLink}>
-                {copied ? "Copied!" : "Copy Link"}
-              </button>
+          <div className="share-manage-flow">
+            <div className="share-live-status-card">
+              <span className="live-status-dot" />
+              <span className="live-status-text">Your Learning Journey is published and live!</span>
             </div>
 
-            <div className="share-action-buttons">
-              <a
-                href={localShare.publicUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="secondary button-link"
+            <div className="share-url-section">
+              <label className="share-field-label">Public Profile URL</label>
+              <div className="share-url-input-row">
+                <input
+                  type="text"
+                  readOnly
+                  className="share-url-field"
+                  value={`${typeof window !== "undefined" ? window.location.origin : ""}${publicProfile.publicUrl}`}
+                />
+                <button
+                  type="button"
+                  className={`share-copy-btn ${copied ? "copied" : ""}`}
+                  onClick={copyLink}
+                >
+                  {copied ? "✓ Copied" : "Copy Link"}
+                </button>
+              </div>
+            </div>
+
+            {error && <div className="form-error-banner">{error}</div>}
+
+            <div className="share-manage-actions-row">
+              <div className="share-primary-actions-group">
+                <a
+                  href={publicProfile.publicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="secondary share-action-btn button-link"
+                >
+                  View Public Profile ↗
+                </a>
+                <button
+                  type="button"
+                  className="primary share-action-btn"
+                  onClick={() => handlePublish(true)}
+                  disabled={busy}
+                >
+                  {busy ? "Updating…" : "Update Published Snapshot"}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className="share-unpublish-btn"
+                onClick={handleUnpublish}
+                disabled={busy}
               >
-                View Public Profile ↗
-              </a>
-              <button className="secondary" onClick={() => handlePublish(true)} disabled={busy}>
-                {busy ? "Updating…" : "Update Published Snapshot"}
-              </button>
-              <button className="text danger" onClick={handleUnpublish} disabled={busy}>
                 Unpublish Profile
               </button>
             </div>
-
-            {error && <p className="notice danger">{error}</p>}
           </div>
         )}
       </div>

@@ -39,18 +39,27 @@ type PomodoroContextType = {
 
 const PomodoroContext = createContext<PomodoroContextType | null>(null);
 
-export function PomodoroProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<PomodoroState>(DEFAULT_POMODORO_STATE);
+export function PomodoroProvider({
+  children,
+  activeGoalId = "goal_default",
+}: {
+  children: React.ReactNode;
+  activeGoalId?: string;
+}) {
+  const [state, setState] = useState<PomodoroState>(() => loadPomodoroState(activeGoalId));
   const [now, setNow] = useState<number>(Date.now());
-  const [isLoaded, setIsLoaded] = useState(false);
+  const isLoaded = true;
   const sounded = useRef(false);
+  const stateRef = useRef(state);
+  const goalIdRef = useRef(activeGoalId);
 
-  // Load state on initial mount
   useEffect(() => {
-    const initial = loadPomodoroState();
-    setState(initial);
-    setIsLoaded(true);
-  }, []);
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    goalIdRef.current = activeGoalId;
+  }, [activeGoalId]);
 
   // Interval timer tick (every 250ms for responsive timestamp updates)
   useEffect(() => {
@@ -60,12 +69,17 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id);
   }, []);
 
-  // Save state on change
+  // Save state on change for the currently active goal
   useEffect(() => {
-    if (isLoaded) {
-      savePomodoroState(state);
-    }
-  }, [state, isLoaded]);
+    savePomodoroState(state, activeGoalId);
+  }, [state, activeGoalId]);
+
+  // Flush save on unmount
+  useEffect(() => {
+    return () => {
+      savePomodoroState(stateRef.current, goalIdRef.current);
+    };
+  }, []);
 
   // Compute remaining time
   const remainingMs = getRemainingMs(state, now);
@@ -76,7 +90,9 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
     if (sounded.current) return;
     sounded.current = true;
     try {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
       [0, 0.72, 1.44].forEach((offset, idx) => {
@@ -115,7 +131,6 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
 
   // Handle phase completion state machine transitions
   useEffect(() => {
-    if (!isLoaded) return;
     if (!state.startedAt || state.isPaused) return;
 
     if (remainingMs === 0) {
@@ -184,37 +199,51 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
         }));
       }
     }
-  }, [remainingMs, state.startedAt, state.isPaused, state.phase, state.completedCycles, state.cycles, state.autoStart, isLoaded, playChime]);
+  }, [
+    remainingMs,
+    state.startedAt,
+    state.isPaused,
+    state.phase,
+    state.completedCycles,
+    state.cycles,
+    state.autoStart,
+    playChime,
+  ]);
 
-  const startRound = useCallback((config: {
-    mode: Mode;
-    customActivity?: string;
-    topic: string;
-    intent: string;
-    focusMins: number;
-    shortMins: number;
-    longMins: number;
-    cycles: number;
-    autoStart: boolean;
-    taskId?: string;
-  }) => {
-    sounded.current = false;
-    const nowMs = Date.now();
-    const newState: PomodoroState = {
-      ...DEFAULT_POMODORO_STATE,
-      ...config,
-      phase: "focus",
-      completedCycles: 0,
-      startedAt: nowMs,
-      pausedAt: null,
-      accumulatedPausedMs: 0,
-      isPaused: false,
-      isRoundStarted: true,
-      reflectionPending: false,
-      completedAt: null,
-    };
-    setState(newState);
-  }, []);
+  const startRound = useCallback(
+    (config: {
+      mode: Mode;
+      customActivity?: string;
+      topic: string;
+      intent: string;
+      focusMins: number;
+      shortMins: number;
+      longMins: number;
+      cycles: number;
+      autoStart: boolean;
+      taskId?: string;
+    }) => {
+      sounded.current = false;
+      const nowMs = Date.now();
+      const newState: PomodoroState = {
+        ...DEFAULT_POMODORO_STATE,
+        ...config,
+        goalId: activeGoalId,
+        phase: "focus",
+        completedCycles: 0,
+        startedAt: nowMs,
+        pausedAt: null,
+        accumulatedPausedMs: 0,
+        isPaused: false,
+        isRoundStarted: true,
+        reflectionPending: false,
+        completedAt: null,
+      };
+      setState(newState);
+      savePomodoroState(newState, activeGoalId);
+    },
+    [activeGoalId]
+  );
 
   const startNextPhase = useCallback(() => {
     if (state.phase !== "waiting" || !state.waitingNextPhase) return;
@@ -268,7 +297,11 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
   }, [state.isPaused, state.pausedAt]);
 
   const skipBreak = useCallback(() => {
-    if (state.phase !== "short" && state.phase !== "long" && !(state.phase === "waiting" && (state.waitingNextPhase === "short" || state.waitingNextPhase === "long"))) {
+    if (
+      state.phase !== "short" &&
+      state.phase !== "long" &&
+      !(state.phase === "waiting" && (state.waitingNextPhase === "short" || state.waitingNextPhase === "long"))
+    ) {
       return;
     }
 
@@ -303,15 +336,15 @@ export function PomodoroProvider({ children }: { children: React.ReactNode }) {
 
   const cancelRound = useCallback(() => {
     sounded.current = false;
-    clearPomodoroState();
-    setState(DEFAULT_POMODORO_STATE);
-  }, []);
+    clearPomodoroState(activeGoalId);
+    setState({ ...DEFAULT_POMODORO_STATE, goalId: activeGoalId });
+  }, [activeGoalId]);
 
   const finishReflection = useCallback(() => {
     sounded.current = false;
-    clearPomodoroState();
-    setState(DEFAULT_POMODORO_STATE);
-  }, []);
+    clearPomodoroState(activeGoalId);
+    setState({ ...DEFAULT_POMODORO_STATE, goalId: activeGoalId });
+  }, [activeGoalId]);
 
   const updateSetupField = useCallback((patch: Partial<PomodoroState>) => {
     setState((prev) => ({

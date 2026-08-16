@@ -22,10 +22,7 @@ export default function GoalSelector({
   const activeGoalStore = multiStore.goals[multiStore.activeGoalId];
   const activeTitle = activeGoalStore?.goal?.title || "Select Goal";
 
-  // Filter non-archived goals for selector
-  const activeGoalsList = Object.values(multiStore.goals).filter(
-    (g) => !g.archivedAt || g.id === multiStore.activeGoalId
-  );
+  const goalEntries = Object.entries(multiStore.goals);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -60,16 +57,18 @@ export default function GoalSelector({
           <div className="goal-dropdown-header">ACTIVE LEARNING GOAL</div>
 
           <div className="goal-dropdown-list">
-            {activeGoalsList.map((g) => {
-              const isSelected = g.id === multiStore.activeGoalId;
+            {goalEntries.map(([goalId, g]) => {
+              const isSelected = goalId === multiStore.activeGoalId;
               const title = g.goal?.title || "Untitled Goal";
               return (
                 <button
-                  key={g.id}
+                  key={goalId}
                   type="button"
                   className={`goal-dropdown-item ${isSelected ? "active" : ""}`}
-                  onClick={() => {
-                    onSelectGoal(g.id);
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onSelectGoal(goalId);
                     setOpen(false);
                   }}
                   role="menuitem"
@@ -86,7 +85,9 @@ export default function GoalSelector({
           <button
             type="button"
             className="goal-dropdown-action"
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               setOpen(false);
               onCreateGoal();
             }}
@@ -98,7 +99,9 @@ export default function GoalSelector({
           <button
             type="button"
             className="goal-dropdown-action"
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               setOpen(false);
               onManageGoals();
             }}

@@ -23,6 +23,7 @@ export type PomodoroState = {
   completedAt?: number | null; // Timestamp in ms when round completed
   waitingNextPhase?: "focus" | "short" | "long";
   taskId?: string;
+  goalId?: string;
 };
 
 export const DEFAULT_POMODORO_STATE: PomodoroState = {
@@ -45,26 +46,52 @@ export const DEFAULT_POMODORO_STATE: PomodoroState = {
   reflectionPending: false,
   completedAt: null,
   taskId: undefined,
+  goalId: undefined,
 };
 
-const POMODORO_STORAGE_KEY = "learning-arc-pomodoro-v1";
+const LEGACY_POMODORO_STORAGE_KEY = "learning-arc-pomodoro-v1";
+
+export function getPomodoroStorageKey(goalId?: string): string {
+  const safeId = goalId ? goalId.replace(/[^a-zA-Z0-9_-]/g, "_") : "default";
+  return `learning-arc-pomodoro-v2-${safeId}`;
+}
 
 /**
- * Loads the active Pomodoro state from local storage.
+ * Loads the active Pomodoro state for a specific goal from local storage.
  * Strictly validates invariants so stale or corrupted state safely falls back to clean Setup mode.
  */
-export function loadPomodoroState(): PomodoroState {
-  if (typeof window === "undefined") return DEFAULT_POMODORO_STATE;
+export function loadPomodoroState(goalId?: string): PomodoroState {
+  if (typeof window === "undefined") {
+    return { ...DEFAULT_POMODORO_STATE, goalId };
+  }
   try {
-    const raw = localStorage.getItem(POMODORO_STORAGE_KEY);
-    if (!raw) return DEFAULT_POMODORO_STATE;
+    const storageKey = getPomodoroStorageKey(goalId);
+
+    // 1. One-time migration of legacy global key if goal-scoped key does not exist yet
+    let raw = localStorage.getItem(storageKey);
+    if (!raw && localStorage.getItem(LEGACY_POMODORO_STORAGE_KEY)) {
+      const legacyRaw = localStorage.getItem(LEGACY_POMODORO_STORAGE_KEY);
+      if (legacyRaw) {
+        try {
+          const parsedLegacy = JSON.parse(legacyRaw);
+          if (parsedLegacy && typeof parsedLegacy === "object") {
+            const migratedState = { ...parsedLegacy, goalId };
+            localStorage.setItem(storageKey, JSON.stringify(migratedState));
+            raw = JSON.stringify(migratedState);
+          }
+        } catch {}
+      }
+      localStorage.removeItem(LEGACY_POMODORO_STORAGE_KEY);
+    }
+
+    if (!raw) return { ...DEFAULT_POMODORO_STATE, goalId };
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object" && typeof parsed.phase === "string") {
       const phase = parsed.phase as PomodoroPhase;
       const now = Date.now();
 
       // 1. Idle phase -> clean setup
-      if (phase === "idle") return DEFAULT_POMODORO_STATE;
+      if (phase === "idle") return { ...DEFAULT_POMODORO_STATE, goalId };
 
       // 2. Reflection phase validation
       // MUST have reflectionPending === true, valid topic, and a completedAt timestamp < 12h ago.
@@ -79,67 +106,71 @@ export function loadPomodoroState(): PomodoroState {
           typeof parsed.topic !== "string" ||
           !parsed.topic.trim()
         ) {
-          clearPomodoroState();
-          return DEFAULT_POMODORO_STATE;
+          clearPomodoroState(goalId);
+          return { ...DEFAULT_POMODORO_STATE, goalId };
         }
       }
 
       // 3. Focus / Short / Long running phase validation
       if (phase === "focus" || phase === "short" || phase === "long") {
         if (!parsed.isRoundStarted || !parsed.startedAt || typeof parsed.startedAt !== "number" || isNaN(parsed.startedAt)) {
-          clearPomodoroState();
-          return DEFAULT_POMODORO_STATE;
+          clearPomodoroState(goalId);
+          return { ...DEFAULT_POMODORO_STATE, goalId };
         }
         // If timer started > 24 hours ago, discard stale abandoned round
         if (now - parsed.startedAt > 24 * 3600 * 1000) {
-          clearPomodoroState();
-          return DEFAULT_POMODORO_STATE;
+          clearPomodoroState(goalId);
+          return { ...DEFAULT_POMODORO_STATE, goalId };
         }
         if (!parsed.topic || typeof parsed.topic !== "string" || !parsed.topic.trim()) {
-          clearPomodoroState();
-          return DEFAULT_POMODORO_STATE;
+          clearPomodoroState(goalId);
+          return { ...DEFAULT_POMODORO_STATE, goalId };
         }
       }
 
       // 4. Waiting phase validation
       if (phase === "waiting") {
         if (!parsed.isRoundStarted || !parsed.waitingNextPhase || !parsed.topic || typeof parsed.topic !== "string" || !parsed.topic.trim()) {
-          clearPomodoroState();
-          return DEFAULT_POMODORO_STATE;
+          clearPomodoroState(goalId);
+          return { ...DEFAULT_POMODORO_STATE, goalId };
         }
       }
 
       return {
         ...DEFAULT_POMODORO_STATE,
         ...parsed,
+        goalId: goalId || parsed.goalId,
       };
     }
   } catch (e) {
     console.error("Failed to load active Pomodoro state:", e);
   }
-  clearPomodoroState();
-  return DEFAULT_POMODORO_STATE;
+  clearPomodoroState(goalId);
+  return { ...DEFAULT_POMODORO_STATE, goalId };
 }
 
 /**
- * Saves active Pomodoro state to local storage.
+ * Saves active Pomodoro state to goal-scoped local storage.
  */
-export function savePomodoroState(state: PomodoroState): void {
+export function savePomodoroState(state: PomodoroState, goalId?: string): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(POMODORO_STORAGE_KEY, JSON.stringify(state));
+    const targetGoalId = goalId || state.goalId;
+    const storageKey = getPomodoroStorageKey(targetGoalId);
+    localStorage.setItem(storageKey, JSON.stringify({ ...state, goalId: targetGoalId }));
   } catch (e) {
     console.error("Failed to save active Pomodoro state:", e);
   }
 }
 
 /**
- * Clears active Pomodoro state from local storage.
+ * Clears active Pomodoro state from goal-scoped local storage.
  */
-export function clearPomodoroState(): void {
+export function clearPomodoroState(goalId?: string): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(POMODORO_STORAGE_KEY);
+    const storageKey = getPomodoroStorageKey(goalId);
+    localStorage.removeItem(storageKey);
   } catch (e) {
     console.error("Failed to clear active Pomodoro state:", e);
   }

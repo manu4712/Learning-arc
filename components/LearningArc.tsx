@@ -24,15 +24,17 @@ import {
   MultiGoalStore,
   Analysis,
   DailyTask,
+  normalizeMultiStore,
+  mergeMultiStore,
   loadMultiStore,
   saveMultiStore,
   createGoal as createGoalInStore,
   switchGoal as switchGoalInStore,
   renameGoalInStore,
-  archiveGoalInStore,
   deleteGoalFromStore,
   stats as calculateStats,
 } from "@/lib/data";
+import { clearPomodoroState } from "@/lib/pomodoro";
 
 type Screen = "today" | "plan" | "focus" | "journey" | "insights" | "proof" | "settings";
 
@@ -80,18 +82,20 @@ function LearningArcContent() {
 
   const updateStore = (patch: Partial<GoalStore>) => {
     setMultiStore((current) => {
-      const activeId = current.activeGoalId;
-      if (!activeId || !current.goals[activeId]) return current;
-      const currentGoalStore = current.goals[activeId];
+      const normalized = normalizeMultiStore(current);
+      const activeId = normalized.activeGoalId;
+      if (!activeId || !normalized.goals[activeId]) return normalized;
+      const currentGoalStore = normalized.goals[activeId];
       const updatedGoalStore: GoalStore = {
         ...currentGoalStore,
         ...patch,
+        id: activeId, // Immutable ID preservation
         updatedAt: new Date().toISOString(),
       };
       const updatedMulti: MultiGoalStore = {
-        ...current,
+        ...normalized,
         goals: {
-          ...current.goals,
+          ...normalized.goals,
           [activeId]: updatedGoalStore,
         },
       };
@@ -102,29 +106,49 @@ function LearningArcContent() {
 
   // Multi-Goal Handler Functions
   const handleSelectGoal = (goalId: string) => {
-    const updated = switchGoalInStore(multiStore, goalId);
-    setMultiStore(updated);
+    setMultiStore((current) => {
+      const updated = switchGoalInStore(current, goalId);
+      return updated;
+    });
   };
 
   const handleCreateGoal = (title: string, description?: string, duration?: string) => {
-    const updated = createGoalInStore(multiStore, title, description, duration);
-    setMultiStore(updated);
+    setMultiStore((current) => {
+      const updated = createGoalInStore(current, title, description, duration);
+      return updated;
+    });
     setOnboard(false);
   };
 
   const handleRenameGoal = (goalId: string, title: string, description?: string) => {
-    const updated = renameGoalInStore(multiStore, goalId, title, description);
-    setMultiStore(updated);
-  };
-
-  const handleArchiveGoal = (goalId: string) => {
-    const updated = archiveGoalInStore(multiStore, goalId);
-    setMultiStore(updated);
+    setMultiStore((current) => renameGoalInStore(current, goalId, title, description));
   };
 
   const handleDeleteGoal = (goalId: string) => {
-    const updated = deleteGoalFromStore(multiStore, goalId);
-    setMultiStore(updated);
+    // 1. Clean up Pomodoro persisted state for deleted goal
+    clearPomodoroState(goalId);
+
+    // 2. Delete goal from multi-store and switch to next valid goal
+    setMultiStore((current) => {
+      const updated = deleteGoalFromStore(current, goalId);
+      const active = updated.goals[updated.activeGoalId];
+      if (!active || !active.goal?.title) {
+        setOnboard(true);
+      }
+      return updated;
+    });
+  };
+
+  const handleRestoreMultiStore = (restored: MultiGoalStore) => {
+    setMultiStore((current) => {
+      const merged = mergeMultiStore(current, restored);
+      saveMultiStore(merged);
+      setTimeout(() => {
+        const active = merged.goals[merged.activeGoalId];
+        setOnboard(!active || !active.goal?.title);
+      }, 0);
+      return merged;
+    });
   };
 
   const handleLaunchTaskFocus = (task: DailyTask) => {
@@ -133,41 +157,64 @@ function LearningArcContent() {
   };
 
   const handleCompleteSession = (newSession: Session) => {
-    // 1. Reflection session evidence is saved FIRST
-    const currentSessions = activeGoalStore.sessions || [];
-    const updatedSessions = [...currentSessions, newSession];
-    let updatedTasks = activeGoalStore.tasks || [];
+    setMultiStore((current) => {
+      const normalized = normalizeMultiStore(current);
+      const targetGoalId = newSession.goalId || normalized.activeGoalId;
+      const targetGoalStore = normalized.goals[targetGoalId] || normalized.goals[normalized.activeGoalId];
+      if (!targetGoalStore) return normalized;
 
-    if (newSession.taskId) {
-      // Append session ID to task.linkedSessionIds
-      updatedTasks = updatedTasks.map((t) => {
-        if (t.id === newSession.taskId) {
-          const linked = t.linkedSessionIds || [];
-          return {
-            ...t,
-            linkedSessionIds: linked.includes(newSession.id) ? linked : [...linked, newSession.id],
-            status: t.status === "planned" ? ("in_progress" as const) : t.status,
-          };
-        }
-        return t;
-      });
+      const currentSessions = targetGoalStore.sessions || [];
+      const sessionToSave: Session = {
+        ...newSession,
+        goalId: targetGoalStore.id,
+      };
+      const updatedSessions = [...currentSessions, sessionToSave];
+      let updatedTasks = targetGoalStore.tasks || [];
 
-      const linkedTask = updatedTasks.find((t) => t.id === newSession.taskId);
+      if (newSession.taskId) {
+        updatedTasks = updatedTasks.map((t) => {
+          if (t.id === newSession.taskId) {
+            const linked = t.linkedSessionIds || [];
+            return {
+              ...t,
+              goalId: targetGoalStore.id,
+              linkedSessionIds: linked.includes(newSession.id) ? linked : [...linked, newSession.id],
+              status: t.status === "planned" ? ("in_progress" as const) : t.status,
+            };
+          }
+          return t;
+        });
+      }
 
-      updateStore({
+      const updatedGoalStore: GoalStore = {
+        ...targetGoalStore,
         sessions: updatedSessions,
         tasks: updatedTasks,
-      });
+        updatedAt: new Date().toISOString(),
+      };
 
-      if (linkedTask) {
-        setPendingOutcomeTask(linkedTask);
+      const updatedMulti: MultiGoalStore = {
+        ...normalized,
+        goals: {
+          ...normalized.goals,
+          [targetGoalStore.id]: updatedGoalStore,
+        },
+      };
+      saveMultiStore(updatedMulti);
+
+      if (newSession.taskId) {
+        const linkedTask = updatedTasks.find((t) => t.id === newSession.taskId);
+        if (linkedTask) {
+          setPendingOutcomeTask(linkedTask);
+        } else {
+          setScreen("today");
+        }
       } else {
         setScreen("today");
       }
-    } else {
-      updateStore({ sessions: updatedSessions });
-      setScreen("today");
-    }
+
+      return updatedMulti;
+    });
 
     setTargetTaskForFocus(undefined);
   };
@@ -241,114 +288,117 @@ function LearningArcContent() {
   };
 
   return (
-    <div className="app-layout">
-      <Header
-        activeScreen={screen}
-        onSelectScreen={handleSelectScreen}
-        multiStore={multiStore}
-        onSelectGoal={handleSelectGoal}
-        onCreateGoal={() => setCreateGoalModalOpen(true)}
-        onManageGoals={() => setManageGoalsModalOpen(true)}
-        menuOpen={menuOpen}
-        setMenuOpen={setMenuOpen}
-      />
-
-      <main className="app-main-content">
-        {screen === "today" && (
-          <TodayView
-            goal={activeGoalStore.goal!}
-            st={st}
-            sessions={activeGoalStore.sessions || []}
-            onNavigate={handleSelectScreen}
-            onRetryAnalysis={handleRetrySessionAnalysis}
-          />
-        )}
-
-        {screen === "plan" && (
-          <PlanView
-            store={activeGoalStore}
-            onUpdateStore={updateStore}
-            onLaunchFocus={handleLaunchTaskFocus}
-          />
-        )}
-
-        {screen === "focus" && (
-          <PomodoroView
-            goal={activeGoalStore.goal!}
-            targetTask={targetTaskForFocus}
-            onCompleteSession={handleCompleteSession}
-          />
-        )}
-
-        {screen === "journey" && (
-          <JourneyView
-            store={activeGoalStore}
-            sessions={activeGoalStore.sessions || []}
-            st={st}
-          />
-        )}
-
-        {screen === "insights" && (
-          <InsightsView
-            store={activeGoalStore}
-            st={st}
-            onUpdateStore={updateStore}
-          />
-        )}
-
-        {screen === "proof" && (
-          <ProofView
-            goal={activeGoalStore.goal!}
-            store={activeGoalStore}
-            st={st}
-          />
-        )}
-
-        {screen === "settings" && (
-          <SettingsView
-            store={activeGoalStore}
-            onUpdateStore={updateStore}
-            onEditGoal={() => setOnboard(true)}
-          />
-        )}
-      </main>
-
-      {/* Post-Reflection Task Outcome Step Modal */}
-      {pendingOutcomeTask && (
-        <TaskOutcomeModal
-          task={pendingOutcomeTask}
-          sessions={activeGoalStore.sessions || []}
-          onOutcome={handleTaskOutcome}
-        />
-      )}
-
-      {/* Multi-Goal Modals */}
-      {createGoalModalOpen && (
-        <CreateGoalModal
-          onClose={() => setCreateGoalModalOpen(false)}
-          onCreate={handleCreateGoal}
-        />
-      )}
-
-      {manageGoalsModalOpen && (
-        <ManageGoalsModal
+    <PomodoroProvider
+      key={multiStore.activeGoalId || "goal_default"}
+      activeGoalId={multiStore.activeGoalId || "goal_default"}
+    >
+      <div className="app-layout">
+        <Header
+          activeScreen={screen}
+          onSelectScreen={handleSelectScreen}
           multiStore={multiStore}
-          onClose={() => setManageGoalsModalOpen(false)}
           onSelectGoal={handleSelectGoal}
-          onRenameGoal={handleRenameGoal}
-          onArchiveGoal={handleArchiveGoal}
-          onDeleteGoal={handleDeleteGoal}
-          onCreateNewGoal={() => setCreateGoalModalOpen(true)}
+          onCreateGoal={() => setCreateGoalModalOpen(true)}
+          onManageGoals={() => setManageGoalsModalOpen(true)}
+          menuOpen={menuOpen}
+          setMenuOpen={setMenuOpen}
         />
-      )}
-    </div>
+
+        <main className="app-main-content">
+          {screen === "today" && (
+            <TodayView
+              goal={activeGoalStore.goal!}
+              st={st}
+              sessions={activeGoalStore.sessions || []}
+              onNavigate={handleSelectScreen}
+              onRetryAnalysis={handleRetrySessionAnalysis}
+            />
+          )}
+
+          {screen === "plan" && (
+            <PlanView
+              store={activeGoalStore}
+              onUpdateStore={updateStore}
+              onLaunchFocus={handleLaunchTaskFocus}
+            />
+          )}
+
+          {screen === "focus" && (
+            <PomodoroView
+              goal={activeGoalStore.goal!}
+              targetTask={targetTaskForFocus}
+              onCompleteSession={handleCompleteSession}
+            />
+          )}
+
+          {screen === "journey" && (
+            <JourneyView
+              store={activeGoalStore}
+              sessions={activeGoalStore.sessions || []}
+              st={st}
+            />
+          )}
+
+          {screen === "insights" && (
+            <InsightsView
+              store={activeGoalStore}
+              st={st}
+              onUpdateStore={updateStore}
+            />
+          )}
+
+          {screen === "proof" && (
+            <ProofView
+              goal={activeGoalStore.goal!}
+              store={activeGoalStore}
+              st={st}
+              onUpdateStore={updateStore}
+            />
+          )}
+
+          {screen === "settings" && (
+            <SettingsView
+              store={activeGoalStore}
+              multiStore={multiStore}
+              onUpdateStore={updateStore}
+              onRestoreMultiStore={handleRestoreMultiStore}
+              onEditGoal={() => setOnboard(true)}
+            />
+          )}
+        </main>
+
+        {/* Post-Reflection Task Outcome Step Modal */}
+        {pendingOutcomeTask && (
+          <TaskOutcomeModal
+            task={pendingOutcomeTask}
+            sessions={activeGoalStore.sessions || []}
+            onOutcome={handleTaskOutcome}
+          />
+        )}
+
+        {/* Multi-Goal Modals */}
+        {createGoalModalOpen && (
+          <CreateGoalModal
+            onClose={() => setCreateGoalModalOpen(false)}
+            onCreate={handleCreateGoal}
+          />
+        )}
+
+        {manageGoalsModalOpen && (
+          <ManageGoalsModal
+            multiStore={multiStore}
+            onClose={() => setManageGoalsModalOpen(false)}
+            onSelectGoal={handleSelectGoal}
+            onRenameGoal={handleRenameGoal}
+            onDeleteGoal={handleDeleteGoal}
+            onCreateNewGoal={() => setCreateGoalModalOpen(true)}
+          />
+        )}
+      </div>
+    </PomodoroProvider>
   );
 }
 
 export default function LearningArc() {
-  return (
-    <PomodoroProvider>
-      <LearningArcContent />
-    </PomodoroProvider>
-  );
+  return <LearningArcContent />;
 }
