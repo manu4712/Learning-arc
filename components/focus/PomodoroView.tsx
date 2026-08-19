@@ -16,6 +16,7 @@ export default function PomodoroView({ goal, onCompleteSession, targetTask }: Po
     state,
     remainingMs,
     isLoaded,
+    selectTask,
     startRound,
     startNextPhase,
     pause,
@@ -23,7 +24,6 @@ export default function PomodoroView({ goal, onCompleteSession, targetTask }: Po
     skipBreak,
     cancelRound,
     finishReflection,
-    updateSetupField,
   } = usePomodoro();
 
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
@@ -70,46 +70,47 @@ export default function PomodoroView({ goal, onCompleteSession, targetTask }: Po
     }
   };
 
-  // Prefill setup if launched from a task
+  // Select target task when launched from Plan or changed
   useEffect(() => {
-    if (targetTask && state.phase === "idle") {
-      if (targetTask.title) setTopic(targetTask.title);
-      if (targetTask.mode) setMode(targetTask.mode);
-      updateSetupField({ taskId: targetTask.id, topic: targetTask.title });
-    } else if (!targetTask && state.phase === "idle") {
-      // Direct navigation to Focus from navbar -> clear any stale taskId
-      if (state.taskId) {
-        updateSetupField({ taskId: undefined });
-      }
+    if (targetTask) {
+      selectTask(targetTask.id, { title: targetTask.title, mode: targetTask.mode });
     }
-  }, [targetTask, state.phase, state.taskId, updateSetupField]);
+  }, [targetTask, selectTask]);
 
   // Sync form state if state is updated to idle
   useEffect(() => {
     if (state.phase === "idle") {
       if (state.mode) setMode(state.mode);
       if (state.customActivity !== undefined) setCustomActivity(state.customActivity);
-      if (!targetTask && state.topic) setTopic(state.topic);
+      if (state.topic !== undefined) setTopic(state.topic);
       if (state.intent !== undefined) setIntent(state.intent);
-      if (state.focusMins) {
-        setFocusMins(state.focusMins);
-        setFocusMinsStr(String(state.focusMins));
-      }
-      if (state.shortMins) {
-        setShortMins(state.shortMins);
-        setShortMinsStr(String(state.shortMins));
-      }
-      if (state.longMins) {
-        setLongMins(state.longMins);
-        setLongMinsStr(String(state.longMins));
-      }
-      if (state.cycles) {
-        setCycles(state.cycles);
-        setCyclesStr(String(state.cycles));
-      }
+      const fMins = state.focusMins || 25;
+      setFocusMins(fMins);
+      setFocusMinsStr(String(fMins));
+      const sMins = state.shortMins || 5;
+      setShortMins(sMins);
+      setShortMinsStr(String(sMins));
+      const lMins = state.longMins || 15;
+      setLongMins(lMins);
+      setLongMinsStr(String(lMins));
+      const cCount = state.cycles || 4;
+      setCycles(cCount);
+      setCyclesStr(String(cCount));
       if (state.autoStart !== undefined) setAutoStart(state.autoStart);
     }
-  }, [state, targetTask]);
+  }, [
+    state.phase,
+    state.taskId,
+    state.topic,
+    state.mode,
+    state.customActivity,
+    state.intent,
+    state.focusMins,
+    state.shortMins,
+    state.longMins,
+    state.cycles,
+    state.autoStart,
+  ]);
 
   if (!isLoaded) {
     return (

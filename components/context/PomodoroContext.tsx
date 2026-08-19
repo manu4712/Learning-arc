@@ -7,6 +7,8 @@ import {
   loadPomodoroState,
   savePomodoroState,
   clearPomodoroState,
+  loadActiveTaskId,
+  saveActiveTaskId,
   getRemainingMs,
   PomodoroPhase,
 } from "@/lib/pomodoro";
@@ -16,6 +18,8 @@ type PomodoroContextType = {
   state: PomodoroState;
   remainingMs: number;
   isLoaded: boolean;
+  activeTaskId: string | undefined;
+  selectTask: (taskId?: string, prefill?: { title?: string; mode?: Mode }) => void;
   startRound: (config: {
     mode: Mode;
     customActivity?: string;
@@ -46,12 +50,16 @@ export function PomodoroProvider({
   children: React.ReactNode;
   activeGoalId?: string;
 }) {
-  const [state, setState] = useState<PomodoroState>(() => loadPomodoroState(activeGoalId));
+  const [activeTaskId, setActiveTaskId] = useState<string | undefined>(() => loadActiveTaskId(activeGoalId));
+  const [state, setState] = useState<PomodoroState>(() =>
+    loadPomodoroState(activeGoalId, loadActiveTaskId(activeGoalId))
+  );
   const [now, setNow] = useState<number>(Date.now());
   const isLoaded = true;
   const sounded = useRef(false);
   const stateRef = useRef(state);
   const goalIdRef = useRef(activeGoalId);
+  const taskIdRef = useRef(activeTaskId);
 
   useEffect(() => {
     stateRef.current = state;
@@ -61,6 +69,10 @@ export function PomodoroProvider({
     goalIdRef.current = activeGoalId;
   }, [activeGoalId]);
 
+  useEffect(() => {
+    taskIdRef.current = activeTaskId;
+  }, [activeTaskId]);
+
   // Interval timer tick (every 250ms for responsive timestamp updates)
   useEffect(() => {
     const id = setInterval(() => {
@@ -69,15 +81,17 @@ export function PomodoroProvider({
     return () => clearInterval(id);
   }, []);
 
-  // Save state on change for the currently active goal
+  // Save state on change for the currently active goal and active task
   useEffect(() => {
-    savePomodoroState(state, activeGoalId);
-  }, [state, activeGoalId]);
+    savePomodoroState(state, activeGoalId, activeTaskId);
+    saveActiveTaskId(activeGoalId, activeTaskId);
+  }, [state, activeGoalId, activeTaskId]);
 
   // Flush save on unmount
   useEffect(() => {
     return () => {
-      savePomodoroState(stateRef.current, goalIdRef.current);
+      savePomodoroState(stateRef.current, goalIdRef.current, taskIdRef.current);
+      saveActiveTaskId(goalIdRef.current, taskIdRef.current);
     };
   }, []);
 
@@ -210,6 +224,55 @@ export function PomodoroProvider({
     playChime,
   ]);
 
+  const selectTask = useCallback(
+    (taskId?: string, prefill?: { title?: string; mode?: Mode }) => {
+      // If already on this task, apply prefill only if still in idle phase
+      if (taskIdRef.current === taskId) {
+        if (prefill && stateRef.current.phase === "idle") {
+          setState((prev) => ({
+            ...prev,
+            topic: prefill.title !== undefined ? prefill.title : prev.topic,
+            mode: prefill.mode !== undefined ? prefill.mode : prev.mode,
+            taskId,
+          }));
+        }
+        return;
+      }
+
+      // 1. Flush save current task state before switching
+      savePomodoroState(stateRef.current, goalIdRef.current, taskIdRef.current);
+
+      // 2. Update active task ref and state
+      taskIdRef.current = taskId;
+      setActiveTaskId(taskId);
+      saveActiveTaskId(activeGoalId, taskId);
+
+      // 3. Load target task's state
+      const targetState = loadPomodoroState(activeGoalId, taskId);
+      sounded.current = false;
+
+      // 4. If target state is idle, apply prefill if provided
+      if (targetState.phase === "idle" && prefill) {
+        const prefilledState: PomodoroState = {
+          ...targetState,
+          topic: prefill.title || targetState.topic,
+          mode: prefill.mode || targetState.mode || "Learning",
+          taskId,
+          goalId: activeGoalId,
+        };
+        setState(prefilledState);
+        savePomodoroState(prefilledState, activeGoalId, taskId);
+      } else {
+        setState({
+          ...targetState,
+          goalId: activeGoalId,
+          taskId,
+        });
+      }
+    },
+    [activeGoalId]
+  );
+
   const startRound = useCallback(
     (config: {
       mode: Mode;
@@ -225,9 +288,11 @@ export function PomodoroProvider({
     }) => {
       sounded.current = false;
       const nowMs = Date.now();
+      const targetTaskId = config.taskId !== undefined ? config.taskId : taskIdRef.current;
       const newState: PomodoroState = {
         ...DEFAULT_POMODORO_STATE,
         ...config,
+        taskId: targetTaskId,
         goalId: activeGoalId,
         phase: "focus",
         completedCycles: 0,
@@ -239,8 +304,11 @@ export function PomodoroProvider({
         reflectionPending: false,
         completedAt: null,
       };
+      taskIdRef.current = targetTaskId;
+      setActiveTaskId(targetTaskId);
       setState(newState);
-      savePomodoroState(newState, activeGoalId);
+      savePomodoroState(newState, activeGoalId, targetTaskId);
+      saveActiveTaskId(activeGoalId, targetTaskId);
     },
     [activeGoalId]
   );
@@ -336,14 +404,16 @@ export function PomodoroProvider({
 
   const cancelRound = useCallback(() => {
     sounded.current = false;
-    clearPomodoroState(activeGoalId);
-    setState({ ...DEFAULT_POMODORO_STATE, goalId: activeGoalId });
+    const currentTask = taskIdRef.current;
+    clearPomodoroState(activeGoalId, currentTask);
+    setState({ ...DEFAULT_POMODORO_STATE, goalId: activeGoalId, taskId: currentTask });
   }, [activeGoalId]);
 
   const finishReflection = useCallback(() => {
     sounded.current = false;
-    clearPomodoroState(activeGoalId);
-    setState({ ...DEFAULT_POMODORO_STATE, goalId: activeGoalId });
+    const currentTask = taskIdRef.current;
+    clearPomodoroState(activeGoalId, currentTask);
+    setState({ ...DEFAULT_POMODORO_STATE, goalId: activeGoalId, taskId: currentTask });
   }, [activeGoalId]);
 
   const updateSetupField = useCallback((patch: Partial<PomodoroState>) => {
@@ -359,6 +429,8 @@ export function PomodoroProvider({
         state,
         remainingMs,
         isLoaded,
+        activeTaskId,
+        selectTask,
         startRound,
         startNextPhase,
         pause,

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Store, DailyTask, TaskPriority, TaskStatus } from "@/lib/data";
+import { clearPomodoroState } from "@/lib/pomodoro";
 import {
   getTodayStr,
   getPlanForDay,
@@ -94,6 +95,7 @@ export default function PlanView({ store, onUpdateStore, onLaunchFocus }: PlanVi
     const existing = store.tasks || [];
     // Delete DailyTask record itself (Session evidence in store.sessions remains preserved!)
     const updated = existing.filter((t) => t.id !== taskToDelete.id);
+    clearPomodoroState(store.id, taskToDelete.id);
     updateTasks(updated);
     setTaskToDelete(undefined);
   };
